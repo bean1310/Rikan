@@ -1,0 +1,15 @@
+[package]
+name = "rikan"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utf16_literal = "0.2.1"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
