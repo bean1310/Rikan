@@ -3,6 +3,8 @@
 #![feature(abi_efiapi)]
 
 use core::panic::PanicInfo;
+use uefi::{EfiHandle, EfiBootServices, EfiFileProtocol, EfiStatus, EfiSimpleFileSystemProtocol, EfiLoadedImageProtocol};
+use uefi::EfiSystemTable;
 use utf16_literal::utf16;
 
 mod uefi;
@@ -16,22 +18,30 @@ struct MemoryMap<'a> {
     descriptor_version: u32,
 }
 
-fn getMemoryMap(memoryMap: &mut MemoryMap, gBS: &uefi::EfiBootServices) -> uefi::EfiStatus {
-    memoryMap.map_size = memoryMap.buffer_size;
-    gBS.GetMemoryMap(
-        &mut memoryMap.map_size,
-        &mut memoryMap.buffer,
-        &mut memoryMap.map_key,
-        &mut memoryMap.descriptor_size,
-        &mut memoryMap.descriptor_version,
+fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices<'static>) -> EfiStatus {
+    memory_map.map_size = memory_map.buffer_size;
+    bs.get_memory_map(
+        &mut memory_map.map_size,
+        &mut memory_map.buffer,
+        &mut memory_map.map_key,
+        &mut memory_map.descriptor_size,
+        &mut memory_map.descriptor_version,
     )
+}
+
+fn open_root_dir(image_handle: EfiHandle, root: &&EfiFileProtocol, bs: EfiBootServices) -> EfiStatus {
+   let loaded_image: &EfiLoadedImageProtocol;
+   let fs: &EfiSimpleFileSystemProtocol;
+
+    // ここから
+    EfiStatus::Success
 }
 
 #[no_mangle]
 pub extern "C" fn efi_main(
-    ImageHandle: uefi::EfiHandle,
-    SystemTable: &uefi::SystemTable,
-) -> uefi::EfiStatus {
+    ImageHandle: EfiHandle,
+    SystemTable: &EfiSystemTable<'static>,
+) -> EfiStatus {
     let _conout = SystemTable.ConOut();
     _conout.Reset(false);
     _conout.OutputString(utf16!("Hello World\n").as_ptr());
@@ -52,7 +62,7 @@ pub extern "C" fn efi_main(
 
     loop {}
 
-    uefi::EfiStatus::Success
+    EfiStatus::Success
 }
 
 #[panic_handler]
