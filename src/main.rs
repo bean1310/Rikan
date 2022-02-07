@@ -3,8 +3,14 @@
 #![feature(abi_efiapi)]
 
 use core::panic::PanicInfo;
-use uefi::{EfiHandle, EfiBootServices, EfiFileProtocol, EfiStatus, EfiSimpleFileSystemProtocol, EfiLoadedImageProtocol};
+use core::ptr::{null, null_mut};
 use uefi::EfiSystemTable;
+use uefi::{
+    EfiBootServices, EfiFileProtocol, EfiHandle, EfiLoadedImageProtocol,
+    EfiSimpleFileSystemProtocol, EfiStatus, EFI_LOADED_IMAGE_PROTOCOL,
+    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+};
+use core::ffi::c_void;
 use utf16_literal::utf16;
 
 mod uefi;
@@ -29,10 +35,22 @@ fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices<'static>) -> Ef
     )
 }
 
-fn open_root_dir(image_handle: EfiHandle, root: &&EfiFileProtocol, bs: EfiBootServices) -> EfiStatus {
-   let loaded_image: &EfiLoadedImageProtocol;
-   let fs: &EfiSimpleFileSystemProtocol;
+fn open_root_dir(
+    image_handle: EfiHandle,
+    root: &&EfiFileProtocol,
+    bs: EfiBootServices<'static>,
+) -> EfiStatus {
+    let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
+    let fs: &EfiSimpleFileSystemProtocol;
 
+    bs.open_protocol(
+        image_handle,
+        &EFI_LOADED_IMAGE_PROTOCOL,
+        (&mut loaded_image as *mut *mut EfiLoadedImageProtocol) as *mut *mut c_void,
+        image_handle,
+        null(),
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+    );
     // ここから
     EfiStatus::Success
 }

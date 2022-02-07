@@ -5,6 +5,23 @@ pub enum EfiStatus {
     Success = 0,
 }
 
+#[repr(C)]
+pub struct EfiGuid {
+    data_1: u32,
+    date_2: u16,
+    date_3: u16,
+    date_4: [u8;8]
+}
+
+pub const EFI_LOADED_IMAGE_PROTOCOL: EfiGuid = EfiGuid {
+    data_1: 0x5b1b31a1,
+    date_2: 0x9652,
+    date_3: 0x11d2,
+    date_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+};
+
+pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
+
 type Char16 = u16;
 type NOT_IMPLEMENTED = usize;
 
@@ -17,7 +34,7 @@ pub struct EfiTableHeader {
     Reserved: u32,
 }
 
-pub struct EfiHandle(*mut c_void);
+pub type EfiHandle = *const c_void;
 
 pub struct EfiSimpleTextOutputProtocol {
     Reset: extern "efiapi" fn(
@@ -91,15 +108,15 @@ pub struct EfiBootServices<'a> {
     disconnect_controller: NOT_IMPLEMENTED,
     open_protocol: extern "efiapi" fn(
         handle: EfiHandle,
-        protocol: &EfiGuid,
-        interface: &&c_void,
+        protocol: *const EfiGuid,
+        interface: *mut *mut c_void,
         agentHandle: EfiHandle,
         controllerHandle: EfiHandle,
         attributes: u32,
     ) -> EfiStatus,
     close_protocol: extern "efiapi" fn(
         handle: EfiHandle,
-        protocol: &EfiGuid,
+        protocol: *const EfiGuid,
         agentHandle: EfiHandle,
         cotrollerHandle: EfiHandle,
     ) -> EfiStatus,
@@ -140,7 +157,7 @@ impl EfiBootServices<'static> {
         &self,
         handle: EfiHandle,
         protocol: &EfiGuid,
-        interface: &&c_void,
+        interface: *mut *mut c_void,
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
         attributes: u32,
@@ -148,7 +165,7 @@ impl EfiBootServices<'static> {
         unsafe {
             (self.open_protocol)(
                 handle,
-                protocol,
+                protocol as *const EfiGuid,
                 interface,
                 agent_handle,
                 controller_handle,
@@ -160,7 +177,7 @@ impl EfiBootServices<'static> {
     pub fn close_protocol(
         &self,
         handle: EfiHandle,
-        protocol: &EfiGuid,
+        protocol: *const EfiGuid,
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
     ) -> EfiStatus {
@@ -198,12 +215,6 @@ pub struct EfiSystemTable<'a> {
     EConfigurationTable: *mut EfiConfigurationTable,
 }
 
-pub struct EfiGuid {
-    data_1: u32,
-    date_2: u16,
-    date_3: u16,
-    date_4: [u8; 8],
-}
 pub struct EfiFileIoToken {}
 pub struct EfiFileProtocol {
     revision: u64,
