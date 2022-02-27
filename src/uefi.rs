@@ -1,5 +1,6 @@
 use core::{ffi::c_void, ops::Not, task::Context};
 
+#[derive(PartialEq)]
 #[repr(C)]
 pub enum EfiStatus {
     Success = 0,
@@ -8,16 +9,23 @@ pub enum EfiStatus {
 #[repr(C)]
 pub struct EfiGuid {
     data_1: u32,
-    date_2: u16,
-    date_3: u16,
-    date_4: [u8;8]
+    data_2: u16,
+    data_3: u16,
+    data_4: [u8;8]
 }
 
 pub const EFI_LOADED_IMAGE_PROTOCOL: EfiGuid = EfiGuid {
     data_1: 0x5b1b31a1,
-    date_2: 0x9652,
-    date_3: 0x11d2,
-    date_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+    data_2: 0x9652,
+    data_3: 0x11d2,
+    data_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+};
+
+pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
+    data_1: 0x0964e5b22,
+    data_2: 0x6459,
+    data_3: 0x11d2,
+    data_4: [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
 };
 
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
@@ -216,6 +224,7 @@ pub struct EfiSystemTable<'a> {
 }
 
 pub struct EfiFileIoToken {}
+#[repr(C)]
 pub struct EfiFileProtocol {
     revision: u64,
     open: extern "efiapi" fn(
@@ -271,7 +280,7 @@ pub struct EfiLoadedImageProtocol<'a> {
     revision: u32,
     parent_handle: EfiHandle,
     system_table: EfiSystemTable<'a>,
-    device_handle: EfiHandle,
+    pub device_handle: EfiHandle,
     file_path: &'a efiDevicePathProtocol,
     reserved: &'a c_void,
     load_options_size: u32,
@@ -308,8 +317,17 @@ pub struct EfiSimpleFileSystemProtocol {
     revision: u64,
     open_volume: extern "efiapi" fn(
         this: &EfiSimpleFileSystemProtocol,
-        root: &&EfiFileProtocol,
+        root: &mut *mut EfiFileProtocol,
     ) -> EfiStatus,
+}
+
+impl EfiSimpleFileSystemProtocol {
+    pub fn open_volume(
+        &mut self,
+        root: &mut *mut EfiFileProtocol,
+    ) -> EfiStatus {
+        (self.open_volume)(self, root)
+    }
 }
 
 impl EfiSystemTable<'static> {

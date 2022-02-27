@@ -2,7 +2,18 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../mikanos/MikanLoaderPkg"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"printlib.h": "c",
+			"loadedimage.h": "c",
+			"uefi.h": "c",
+			"uefibasetype.h": "c",
+			"base.h": "c"
+		}
+	}
 }

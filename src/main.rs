@@ -3,8 +3,8 @@
 #![feature(abi_efiapi)]
 
 use core::panic::PanicInfo;
-use core::ptr::{null, null_mut};
-use uefi::EfiSystemTable;
+use core::ptr::{null, null_mut, self};
+use uefi::{EfiSystemTable, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID};
 use uefi::{
     EfiBootServices, EfiFileProtocol, EfiHandle, EfiLoadedImageProtocol,
     EfiSimpleFileSystemProtocol, EfiStatus, EFI_LOADED_IMAGE_PROTOCOL,
@@ -37,11 +37,11 @@ fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices<'static>) -> Ef
 
 fn open_root_dir(
     image_handle: EfiHandle,
-    root: &&EfiFileProtocol,
-    bs: EfiBootServices<'static>,
+    root: &mut *mut EfiFileProtocol,
+    bs: &EfiBootServices<'static>,
 ) -> EfiStatus {
     let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
-    let fs: &EfiSimpleFileSystemProtocol;
+    let mut fs: *mut EfiSimpleFileSystemProtocol = null_mut();
 
     bs.open_protocol(
         image_handle,
@@ -51,7 +51,18 @@ fn open_root_dir(
         null(),
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
     );
-    // ここから
+
+    bs.open_protocol(
+        unsafe{(*loaded_image).device_handle}, 
+        &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+        (&mut fs as *mut *mut EfiSimpleFileSystemProtocol) as *mut *mut c_void,
+        image_handle,
+        null(),
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL
+    );
+
+    unsafe{(*fs).open_volume(root)};
+
     EfiStatus::Success
 }
 
@@ -76,7 +87,14 @@ pub extern "C" fn efi_main(
 
     getMemoryMap(&mut memoryMap, SystemTable.BootServices());
 
-    _conout.OutputString(utf16!("hoge").as_ptr());
+    _conout.OutputString(utf16!("pass1").as_ptr());
+
+    let root_dir: &mut *mut EfiFileProtocol = &mut ptr::null_mut();
+    open_root_dir(ImageHandle, root_dir, SystemTable.BootServices());
+
+    //ここから
+
+    _conout.OutputString(utf16!("pass2").as_ptr());
 
     loop {}
 
