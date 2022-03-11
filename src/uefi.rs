@@ -29,6 +29,9 @@ pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
 };
 
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
+pub const EFI_FILE_MODE_READ    :u64 = 0x0000000000000001;
+pub const EFI_FILE_MODE_WRITE   :u64 = 0x0000000000000002;
+pub const EFI_FILE_MODE_CREATE  :u64 = 0x8000000000000000;
 
 type Char16 = u16;
 type NOT_IMPLEMENTED = usize;
@@ -229,8 +232,8 @@ pub struct EfiFileProtocol {
     revision: u64,
     open: extern "efiapi" fn(
         this: &EfiFileProtocol,
-        newHandle: &(&EfiFileProtocol),
-        fileName: &Char16,
+        newHandle: &mut *mut EfiFileProtocol,
+        fileName: *const Char16,
         openMode: u64,
         attribute: u64,
     ) -> EfiStatus,
@@ -272,6 +275,18 @@ pub struct EfiFileProtocol {
     read_ex: extern "efiapi" fn(this: &EfiFileProtocol, token: &EfiFileIoToken) -> EfiStatus,
     write_ex: extern "efiapi" fn(this: &EfiFileProtocol, token: &EfiFileIoToken) -> EfiStatus,
     flash_ex: extern "efiapi" fn(this: &EfiFileProtocol, token: &EfiFileIoToken) -> EfiStatus,
+}
+
+impl EfiFileProtocol {
+    pub fn open(
+        &self,
+        new_handle: &mut *mut Self,
+        file_name: *const Char16,
+        open_mode: u64,
+        attribute: u64
+    ) -> EfiStatus {
+        unsafe { (self.open)(self, new_handle, file_name, open_mode, attribute) }
+    }
 }
 
 pub struct efiDevicePathProtocol{}

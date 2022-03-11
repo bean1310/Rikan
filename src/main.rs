@@ -4,7 +4,7 @@
 
 use core::panic::PanicInfo;
 use core::ptr::{null, null_mut, self};
-use uefi::{EfiSystemTable, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID};
+use uefi::{EfiSystemTable, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE, EFI_FILE_MODE_CREATE};
 use uefi::{
     EfiBootServices, EfiFileProtocol, EfiHandle, EfiLoadedImageProtocol,
     EfiSimpleFileSystemProtocol, EfiStatus, EFI_LOADED_IMAGE_PROTOCOL,
@@ -89,8 +89,14 @@ pub extern "C" fn efi_main(
 
     _conout.OutputString(utf16!("pass1").as_ptr());
 
-    let root_dir: &mut *mut EfiFileProtocol = &mut ptr::null_mut();
-    open_root_dir(ImageHandle, root_dir, SystemTable.BootServices());
+    let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
+    open_root_dir(ImageHandle, &mut root_dir, SystemTable.BootServices());
+
+    let mut memmap_file: *mut EfiFileProtocol = ptr::null_mut();
+
+    unsafe{
+        (*root_dir).open(&mut memmap_file, utf16!("memmap").as_ptr(), EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
+    }
 
     //ここから
 
