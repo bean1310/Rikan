@@ -247,7 +247,7 @@ pub struct EfiFileProtocol {
     write: extern "efiapi" fn(
         this: &EfiFileProtocol,
         bufferSize: &usize,
-        buffer: &c_void,
+        buffer: *const c_void,
     ) -> EfiStatus,
     get_position: extern "efiapi" fn(this: &EfiFileProtocol, position: &u64) -> EfiStatus,
     set_position: extern "efiapi" fn(this: &EfiFileProtocol, position: &u64) -> EfiStatus,
@@ -286,6 +286,14 @@ impl EfiFileProtocol {
         attribute: u64
     ) -> EfiStatus {
         unsafe { (self.open)(self, new_handle, file_name, open_mode, attribute) }
+    }
+
+    pub fn write(
+        &self, 
+        buffer_size: usize,
+        buffer: &str
+    ) -> EfiStatus {
+        (self.write)(self, &buffer_size, buffer.as_ptr() as *const c_void)
     }
 }
 
