@@ -1,4 +1,4 @@
-use core::{ffi::c_void, ops::Not, task::Context};
+use core::{ffi::c_void, ops::Not, task::Context, ptr};
 
 #[derive(PartialEq)]
 #[repr(C)]
@@ -90,8 +90,14 @@ pub struct EfiBootServices<'a> {
         DescriptorSize: *mut usize,
         DescriptoraVersion: *mut u32,
     ) -> EfiStatus,
-    allocate_pool: NOT_IMPLEMENTED,
-    free_pool: NOT_IMPLEMENTED,
+    allocate_pool: extern "efiapi" fn(
+        pooltype: EfiMemoryType,
+        size: usize,
+        buffer: &mut *mut u8
+    )->EfiStatus,
+    free_pool: extern "efiapi" fn (
+        address: *mut u8,
+    ) -> EfiStatus,
     create_event: NOT_IMPLEMENTED,
     set_timer: NOT_IMPLEMENTED,
     wait_for_event: NOT_IMPLEMENTED,
@@ -193,6 +199,30 @@ impl EfiBootServices<'static> {
         controller_handle: EfiHandle,
     ) -> EfiStatus {
         unsafe { (self.close_protocol)(handle, protocol, agent_handle, controller_handle) }
+    }
+
+    pub fn allocate_pool(
+        &self,
+        pooltype: EfiMemoryType,
+        size: usize,
+    ) -> Result<*mut u8, ()>{
+        let mut buffer = ptr::null_mut();
+        if (self.allocate_pool)(pooltype, size, &mut buffer) == EfiStatus::Success {
+            Ok(buffer.into())
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn free_pool(
+        &self,
+        buffer: *mut u8,
+    ) -> Result<(), ()> {
+        if (self.free_pool)(buffer) == EfiStatus::Success {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 

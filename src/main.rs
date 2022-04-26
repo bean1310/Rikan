@@ -1,20 +1,21 @@
 #![no_std]
 #![no_main]
 #![feature(abi_efiapi)]
+#![feature(alloc_error_handler)]
 
-extern crate alloc;
-#[macro_use]
-use alloc::format;
+// extern crate alloc;
+
 use core::panic::PanicInfo;
 use core::ptr::{null, null_mut, self};
-use uefi::{EfiSystemTable, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, EFI_FILE_MODE_READ, EFI_FILE_MODE_WRITE, EFI_FILE_MODE_CREATE};
-use uefi::{
-    EfiBootServices, EfiFileProtocol, EfiHandle, EfiLoadedImageProtocol,
-    EfiSimpleFileSystemProtocol, EfiStatus, EFI_LOADED_IMAGE_PROTOCOL,
-    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,EfiSimpleTextOutputProtocol,
-};
+use uefi::*;
 use core::ffi::c_void;
 use utf16_literal::utf16;
+
+#[macro_use]
+extern crate alloc;
+mod uefi_alloc;
+
+// extern crate alloc;
 
 mod uefi;
 
@@ -89,7 +90,7 @@ pub extern "C" fn efi_main(
 ) -> EfiStatus {
     let _conout = SystemTable.ConOut();
     _conout.Reset(false);
-    _conout.OutputString(utf16!("Hello World\n").as_ptr());
+    _conout.OutputString(utf16!("Hello World\r\n").as_ptr());
 
     let mut buffer: [u8; 4096 * 4] = [0; 4096 * 4];
     let mut memoryMap = MemoryMap {
@@ -114,8 +115,13 @@ pub extern "C" fn efi_main(
         (*root_dir).open(&mut memmap_file, utf16!("memmap").as_ptr(), EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
     }
 
-    save_memory_map(&memoryMap, &memmap_file, _conout);
+    // save_memory_map(&memoryMap, &memmap_file, _conout);
     //ここから
+    _conout.OutputString(utf16!("pass1.0").as_ptr());
+    let display_data = format!("{}{}", 1, 2).as_bytes().as_ptr();
+
+    _conout.OutputString(utf16!("pass1.1").as_ptr());
+    _conout.OutputString(display_data as *const u16);
 
     _conout.OutputString(utf16!("pass2").as_ptr());
 
