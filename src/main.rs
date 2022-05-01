@@ -7,6 +7,10 @@
 
 use core::panic::PanicInfo;
 use core::ptr::{null, null_mut, self};
+use alloc::boxed::Box;
+use alloc::fmt::format;
+use alloc::string::{String, self, ToString};
+use alloc::vec::Vec;
 use uefi::*;
 use core::ffi::c_void;
 use utf16_literal::utf16;
@@ -19,16 +23,17 @@ mod uefi_alloc;
 
 mod uefi;
 
+
 struct MemoryMap<'a> {
     buffer_size: usize,
-    buffer: &'a mut [u8],
+    buffer: &'a mut[EfiMemoryDescriptor],
     map_size: usize,
     map_key: usize,
     descriptor_size: usize,
     descriptor_version: u32,
 }
 
-fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices<'static>) -> EfiStatus {
+fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices) -> EfiStatus {
     memory_map.map_size = memory_map.buffer_size;
     bs.get_memory_map(
         &mut memory_map.map_size,
@@ -55,7 +60,7 @@ fn save_memory_map(map: &MemoryMap, file: &EfiFileProtocol, cout: &EfiSimpleText
 fn open_root_dir(
     image_handle: EfiHandle,
     root: &mut *mut EfiFileProtocol,
-    bs: &EfiBootServices<'static>,
+    bs: &EfiBootServices,
 ) -> EfiStatus {
     let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
     let mut fs: *mut EfiSimpleFileSystemProtocol = null_mut();
@@ -83,18 +88,47 @@ fn open_root_dir(
     EfiStatus::Success
 }
 
+struct Console<'a> {
+    protocol: &'a EfiSimpleTextOutputProtocol,
+}
+
+impl<'a> Console<'a> {
+    fn new(simpleTextOutputProto: &'a EfiSimpleTextOutputProtocol) -> Console<'a> {
+        simpleTextOutputProto.Reset(false);
+        Console {
+            protocol: simpleTextOutputProto,
+        }
+    }
+    // 引数のやつに\0自動的につけたいが...
+    fn log(&self, text: *const u16) {
+        self.protocol.OutputString(utf16!("[log] \0").as_ptr());
+        self.protocol.OutputString(text);
+        self.protocol.OutputString(utf16!("\r\n\0").as_ptr());
+    }
+
+    fn logng(&self, text: &str) {
+        // self.protocol.OutputString(utf16!("enter!!\0").as_ptr());
+        let prefix = String::from("[log]");
+        let full_text = prefix + text + "\r\n\0";
+        let u16_str:Vec<u16> = full_text.encode_utf16().into_iter().collect();
+        let u16_ptr = u16_str.as_ptr();
+        self.protocol.OutputString(u16_ptr);
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn efi_main(
     ImageHandle: EfiHandle,
-    SystemTable: &EfiSystemTable<'static>,
+    SystemTable: &EfiSystemTable,
 ) -> EfiStatus {
-    let _conout = SystemTable.ConOut();
-    _conout.Reset(false);
-    _conout.OutputString(utf16!("Hello World\r\n").as_ptr());
+    let console = Console::new(SystemTable.ConOut());
+    uefi_alloc::init(SystemTable.BootServices(), SystemTable.ConOut());
+    console.log(utf16!("Start efi_main\0").as_ptr());
+    console.logng(&(format!("{} + {} = {}", 1, 5, 6)));
 
-    let mut buffer: [u8; 4096 * 4] = [0; 4096 * 4];
+    let mut buffer: [EfiMemoryDescriptor; 10] = [Default::default(); 10];
     let mut memoryMap = MemoryMap {
-        buffer_size: 4096 * 4,
+        buffer_size: buffer.len(),
         buffer: &mut buffer,
         map_size: 0,
         map_key: 0,
@@ -102,12 +136,15 @@ pub extern "C" fn efi_main(
         descriptor_version: 0,
     };
 
-    getMemoryMap(&mut memoryMap, SystemTable.BootServices());
+    let res = getMemoryMap(&mut memoryMap, SystemTable.BootServices());
+    if res != EfiStatus::Success {
+        panic!();
+    }
 
-    _conout.OutputString(utf16!("pass1").as_ptr());
-
+    console.log(utf16!("getMemoryMap is done\0").as_ptr());
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
     open_root_dir(ImageHandle, &mut root_dir, SystemTable.BootServices());
+    console.log(utf16!("open_root_dir is done\0").as_ptr());
 
     let mut memmap_file: *mut EfiFileProtocol = ptr::null_mut();
 
@@ -117,13 +154,13 @@ pub extern "C" fn efi_main(
 
     // save_memory_map(&memoryMap, &memmap_file, _conout);
     //ここから
-    _conout.OutputString(utf16!("pass1.0").as_ptr());
-    let display_data = format!("{}{}", 1, 2).as_bytes().as_ptr();
+    // _conout.OutputString(utf16!("pass1.0\r\n").as_ptr());
+    // let display_data = format!("n");
 
-    _conout.OutputString(utf16!("pass1.1").as_ptr());
-    _conout.OutputString(display_data as *const u16);
+    // _conout.OutputString(utf16!("pass1.1").as_ptr());
+    // _conout.OutputString(display_data as *const u16);
 
-    _conout.OutputString(utf16!("pass2").as_ptr());
+    // _conout.OutputString(utf16!("pass2").as_ptr());
 
     loop {}
 
