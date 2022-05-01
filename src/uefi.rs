@@ -1,4 +1,4 @@
-use core::{ffi::c_void, ops::Not, task::Context};
+use core::{ffi::c_void, ops::Not, task::Context, ptr};
 
 #[derive(PartialEq)]
 #[repr(C)]
@@ -77,7 +77,7 @@ impl EfiSimpleTextOutputProtocol {
 pub struct EfiSimpleTextInputProtocol {}
 pub struct EfiRuntimeService {}
 #[repr(C)]
-pub struct EfiBootServices<'a> {
+pub struct EfiBootServices {
     hdr: EfiTableHeader,
     raise_tpl: NOT_IMPLEMENTED,
     restore_tpl: NOT_IMPLEMENTED,
@@ -90,8 +90,14 @@ pub struct EfiBootServices<'a> {
         DescriptorSize: *mut usize,
         DescriptoraVersion: *mut u32,
     ) -> EfiStatus,
-    allocate_pool: NOT_IMPLEMENTED,
-    free_pool: NOT_IMPLEMENTED,
+    allocate_pool: extern "efiapi" fn(
+        pooltype: EfiMemoryType,
+        size: usize,
+        buffer: &mut *mut u8
+    )->EfiStatus,
+    free_pool: extern "efiapi" fn (
+        address: *mut u8,
+    ) -> EfiStatus,
     create_event: NOT_IMPLEMENTED,
     set_timer: NOT_IMPLEMENTED,
     wait_for_event: NOT_IMPLEMENTED,
@@ -102,7 +108,7 @@ pub struct EfiBootServices<'a> {
     reinstall_protocol_interface: NOT_IMPLEMENTED,
     uninstall_protocol_interface: NOT_IMPLEMENTED,
     handle_protocol: NOT_IMPLEMENTED,
-    reserved: &'a c_void,
+    reserved: NOT_IMPLEMENTED,
     register_protocol_notify: NOT_IMPLEMENTED,
     locate_handle: NOT_IMPLEMENTED,
     locate_device_path: NOT_IMPLEMENTED,
@@ -143,11 +149,11 @@ pub struct EfiBootServices<'a> {
     create_event_ex: NOT_IMPLEMENTED,
 }
 
-impl EfiBootServices<'static> {
+impl EfiBootServices {
     pub fn get_memory_map(
         &self,
         MemoryMapSize: &mut usize,
-        MemoryMap: &mut [u8],
+        MemoryMap: &mut [EfiMemoryDescriptor],
         MapKey: &mut usize,
         DescriptorSize: &mut usize,
         DescriptoraVersion: &mut u32,
@@ -155,8 +161,8 @@ impl EfiBootServices<'static> {
         unsafe {
             (self.get_memory_map)(
                 MemoryMapSize as *mut usize,
-                // MemoryMap as *mut [EfiMemoryDescriptor],
-                (MemoryMap as *mut [u8]) as *mut [EfiMemoryDescriptor],
+                MemoryMap as *mut [EfiMemoryDescriptor],
+                // (MemoryMap as *mut [u8]) as *mut [EfiMemoryDescriptor],
                 MapKey as *mut usize,
                 DescriptorSize as *mut usize,
                 DescriptoraVersion as *mut u32,
@@ -194,8 +200,35 @@ impl EfiBootServices<'static> {
     ) -> EfiStatus {
         unsafe { (self.close_protocol)(handle, protocol, agent_handle, controller_handle) }
     }
+
+    pub fn allocate_pool(
+        &self,
+        pooltype: EfiMemoryType,
+        size: usize,
+    ) -> Result<*mut u8, ()>{
+        let mut buffer = ptr::null_mut();
+        let buffer_ptr = &mut buffer;
+        if (self.allocate_pool)(pooltype, size, buffer_ptr) as i32 == 0 {
+            assert!(!((*buffer_ptr).is_null()));
+            Ok(*buffer_ptr)
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn free_pool(
+        &self,
+        buffer: *mut u8,
+    ) -> Result<(), ()> {
+        if (self.free_pool)(buffer) == EfiStatus::Success {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
 }
 
+#[derive(Default, Clone, Copy)]
 #[repr(C)]
 pub struct EfiMemoryDescriptor {
     Type: u32,
@@ -210,7 +243,7 @@ pub type EfiVirtualAddress = u64;
 pub struct EfiConfigurationTable {}
 
 #[repr(C)]
-pub struct EfiSystemTable<'a> {
+pub struct EfiSystemTable {
     Hdr: EfiTableHeader,
     FirmwareVendor: *const Char16,
     FirmwareRevision: u32,
@@ -221,7 +254,7 @@ pub struct EfiSystemTable<'a> {
     StandardErrorHandle: EfiHandle,
     StdErr: *mut EfiSimpleTextOutputProtocol,
     RuntimeServices: *mut EfiRuntimeService,
-    BootServices: *mut EfiBootServices<'a>,
+    BootServices: *mut EfiBootServices,
     NumberOfTableEntries: usize,
     EConfigurationTable: *mut EfiConfigurationTable,
 }
@@ -302,7 +335,7 @@ pub struct efiDevicePathProtocol{}
 pub struct EfiLoadedImageProtocol<'a> {
     revision: u32,
     parent_handle: EfiHandle,
-    system_table: EfiSystemTable<'a>,
+    system_table: EfiSystemTable,
     pub device_handle: EfiHandle,
     file_path: &'a efiDevicePathProtocol,
     reserved: &'a c_void,
@@ -315,10 +348,11 @@ pub struct EfiLoadedImageProtocol<'a> {
     unload: extern "efiapi" fn(imageHandle: EfiHandle) -> EfiStatus,
 }
 
+#[repr(C)]
 pub enum EfiMemoryType {
-    EfiReservedMemoryType,
-    EfiLoaderCode,
-    EfiLoaderData,
+    EfiReservedMemoryType = 0,
+    EfiLoaderCode = 1,
+    EfiLoaderData = 2,
     EfiBootServicesCode,
     EfiBootServicesData,
     EfiRuntimeServicesCode,
@@ -353,12 +387,12 @@ impl EfiSimpleFileSystemProtocol {
     }
 }
 
-impl EfiSystemTable<'static> {
+impl EfiSystemTable {
     pub fn ConOut(&self) -> &mut EfiSimpleTextOutputProtocol {
         unsafe { &mut *self.ConOut }
     }
 
-    pub fn BootServices(&self) -> &EfiBootServices<'static> {
+    pub fn BootServices(&self) -> &EfiBootServices {
         unsafe { &*self.BootServices }
     }
 }
