@@ -108,7 +108,7 @@ impl<'a> Console<'a> {
 
     fn logng(&self, text: &str) {
         // self.protocol.OutputString(utf16!("enter!!\0").as_ptr());
-        let prefix = String::from("[log]");
+        let prefix = String::from("[BL-LOG] ");
         let full_text = prefix + text + "\r\n\0";
         let u16_str:Vec<u16> = full_text.encode_utf16().into_iter().collect();
         let u16_ptr = u16_str.as_ptr();
@@ -123,8 +123,7 @@ pub extern "C" fn efi_main(
 ) -> EfiStatus {
     let console = Console::new(SystemTable.ConOut());
     uefi_alloc::init(SystemTable.BootServices(), SystemTable.ConOut());
-    console.log(utf16!("Start efi_main\0").as_ptr());
-    console.logng(&(format!("{} + {} = {}", 1, 5, 6)));
+    console.logng("--- efi_main start ---");
 
     let mut buffer: [EfiMemoryDescriptor; 10] = [Default::default(); 10];
     let mut memoryMap = MemoryMap {

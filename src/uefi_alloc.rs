@@ -17,9 +17,6 @@ pub fn init(boot_services: &EfiBootServices, cout: &mut EfiSimpleTextOutputProto
         EFI_BOOT_SERVICES = NonNull::new(boot_services as *const _ as *mut _);
         COUT = NonNull::new(cout as *const _ as *mut _);
     }
-    // unsafe {
-    //     COUT.unwrap().as_ref().OutputString(utf16!("inited\0").as_ptr());
-    // }
 }
 
 unsafe impl GlobalAlloc for Allocator {
@@ -29,38 +26,16 @@ unsafe impl GlobalAlloc for Allocator {
         let size = layout.size();
         let align = layout.align();
 
-        // unsafe {
-        //     COUT.unwrap().as_ref().OutputString(utf16!("alloc\0").as_ptr());
-        // }
-
         if align > 8 {
-            // ここに入る場合ってどういう時だろう？
-            // わからんので無視。まずければ考える。
             unsafe {
                 COUT.unwrap().as_ref().OutputString(utf16!("align g8\0").as_ptr());
             }
             panic!()
-            // ptr::null_mut()
         } else {
-            // unsafe {
-            //     COUT.unwrap().as_ref().OutputString(utf16!("align l8\0").as_ptr());
-            // }
             let res = EFI_BOOT_SERVICES
                 .unwrap()
                 .as_ref()
                 .allocate_pool(memoryType, size);
-
-            // if res.is_err() {
-            //     unsafe {
-            //         COUT.unwrap().as_ref().OutputString(utf16!("ERR\0").as_ptr());
-            //     }
-            // }
-
-            // if res.unwrap().is_null() {
-            //     unsafe {
-            //         COUT.unwrap().as_ref().OutputString(utf16!("NULLPTR\0").as_ptr());
-            //     }
-            // }
 
             res.unwrap()
         }
