@@ -228,7 +228,7 @@ impl EfiBootServices {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct EfiMemoryDescriptor {
     Type: u32,

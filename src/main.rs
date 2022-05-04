@@ -23,7 +23,7 @@ mod uefi_alloc;
 
 mod uefi;
 
-
+#[derive(Debug)]
 struct MemoryMap<'a> {
     buffer_size: usize,
     buffer: &'a mut[EfiMemoryDescriptor],
