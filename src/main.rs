@@ -7,9 +7,6 @@
 
 use core::panic::PanicInfo;
 use core::ptr::{null, null_mut, self};
-use alloc::fmt::format;
-use alloc::string::{String};
-use alloc::vec::Vec;
 use uefi::*;
 use core::ffi::c_void;
 use utf16_literal::utf16;
@@ -20,6 +17,9 @@ mod uefi_alloc;
 // extern crate alloc;
 
 mod uefi;
+mod console;
+
+use console::*;
 
 #[derive(Debug)]
 struct MemoryMap<'a> {
@@ -70,7 +70,7 @@ fn open_root_dir(
         image_handle,
         null(),
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-    );
+    ).unwrap();
 
     bs.open_protocol(
         unsafe{(*loaded_image).device_handle}, 
@@ -79,40 +79,14 @@ fn open_root_dir(
         image_handle,
         null(),
         EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL
-    );
+    ).unwrap();
 
-    unsafe{(*fs).open_volume(root)};
+    //こいつが止めてる
+    unsafe{(*fs).open_volume(root)}.unwrap();
 
     EfiStatus::Success
 }
 
-struct Console<'a> {
-    protocol: &'a EfiSimpleTextOutputProtocol,
-}
-
-impl<'a> Console<'a> {
-    fn new(simple_text_output_proto: &'a EfiSimpleTextOutputProtocol) -> Console<'a> {
-        simple_text_output_proto.reset(false);
-        Console {
-            protocol: simple_text_output_proto,
-        }
-    }
-    // 引数のやつに\0自動的につけたいが...
-    fn log(&self, text: *const u16) {
-        self.protocol.output_string(utf16!("[log] \0").as_ptr());
-        self.protocol.output_string(text);
-        self.protocol.output_string(utf16!("\r\n\0").as_ptr());
-    }
-
-    fn logng(&self, text: &str) {
-        // self.protocol.OutputString(utf16!("enter!!\0").as_ptr());
-        let prefix = String::from("[BL-LOG] ");
-        let full_text = prefix + text + "\r\n\0";
-        let u16_str:Vec<u16> = full_text.encode_utf16().into_iter().collect();
-        let u16_ptr = u16_str.as_ptr();
-        self.protocol.output_string(u16_ptr);
-    }
-}
 
 #[no_mangle]
 #[allow(unreachable_code)]
@@ -120,9 +94,10 @@ pub extern "C" fn efi_main(
     image_handle: EfiHandle,
     system_table: &EfiSystemTable,
 ) -> EfiStatus {
-    let console = Console::new(system_table.con_out());
     uefi_alloc::init(system_table.boot_services(), system_table.con_out());
-    console.logng("--- efi_main start ---");
+    console::init(system_table.con_out());
+    println!("---- efi_main -----");
+    println!("{} + {} = {}", 10, 20, 10 + 20);
 
     let mut buffer: [EfiMemoryDescriptor; 10] = [Default::default(); 10];
     let mut memory_map = MemoryMap {
@@ -139,10 +114,11 @@ pub extern "C" fn efi_main(
         panic!();
     }
 
-    console.log(utf16!("getMemoryMap is done\0").as_ptr());
+    // console.log(utf16!("getMemoryMap is done\0").as_ptr());
+    println!("get_memory_map() is done !");
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
     open_root_dir(image_handle, &mut root_dir, system_table.boot_services());
-    console.log(utf16!("open_root_dir is done\0").as_ptr());
+    println!("open_root_dir() is done");
 
     let mut memmap_file: *mut EfiFileProtocol = ptr::null_mut();
 
@@ -167,5 +143,6 @@ pub extern "C" fn efi_main(
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
+    println!("{}", _panic);
     loop {}
 }

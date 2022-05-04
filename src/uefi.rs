@@ -1,6 +1,9 @@
 use core::{ffi::c_void, ptr};
 
-#[derive(PartialEq)]
+use crate::print;
+use crate::println;
+
+#[derive(PartialEq, Debug)]
 #[repr(C)]
 pub enum EfiStatus {
     Success = 0,
@@ -171,15 +174,21 @@ impl EfiBootServices {
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
         attributes: u32,
-    ) -> EfiStatus {
-        (self.open_protocol)(
+    ) -> Result<(), EfiStatus> {
+        let _res = (self.open_protocol)(
             handle,
             protocol as *const EfiGuid,
             interface,
             agent_handle,
             controller_handle,
             attributes,
-        )
+        );
+
+        if _res == EfiStatus::Success {
+            Ok(())
+        } else {
+            Err(_res)
+        }
     }
 
     pub fn close_protocol(
@@ -359,8 +368,15 @@ pub struct EfiSimpleFileSystemProtocol {
 }
 
 impl EfiSimpleFileSystemProtocol {
-    pub fn open_volume(&mut self, root: &mut *mut EfiFileProtocol) -> EfiStatus {
-        (self.open_volume)(self, root)
+    pub fn open_volume(&mut self, root: &mut *mut EfiFileProtocol) -> Result<(), EfiStatus> {
+        println!("Before calling");
+        let _res = (self.open_volume)(self, root);
+        println!("After calling");
+        if _res == EfiStatus::Success {
+            Ok(())
+        } else {
+            Err(_res)
+        }
     }
 }
 
