@@ -7,15 +7,13 @@
 
 use core::panic::PanicInfo;
 use core::ptr::{null, null_mut, self};
-use alloc::boxed::Box;
 use alloc::fmt::format;
-use alloc::string::{String, self, ToString};
+use alloc::string::{String};
 use alloc::vec::Vec;
 use uefi::*;
 use core::ffi::c_void;
 use utf16_literal::utf16;
 
-#[macro_use]
 extern crate alloc;
 mod uefi_alloc;
 
@@ -33,7 +31,7 @@ struct MemoryMap<'a> {
     descriptor_version: u32,
 }
 
-fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices) -> EfiStatus {
+fn get_memory_map(memory_map: &mut MemoryMap, bs: &EfiBootServices) -> EfiStatus {
     memory_map.map_size = memory_map.buffer_size;
     bs.get_memory_map(
         &mut memory_map.map_size,
@@ -44,7 +42,7 @@ fn getMemoryMap(memory_map: &mut MemoryMap, bs: &EfiBootServices) -> EfiStatus {
     )
 }
 
-fn save_memory_map(map: &MemoryMap, file: &EfiFileProtocol, cout: &EfiSimpleTextOutputProtocol) -> EfiStatus {
+fn save_memory_map(map: &MemoryMap, file: &EfiFileProtocol) -> EfiStatus {
     let header = "Index, Type, Type(name), PhysicalStart, NumberOfPages, Attribute\n";
     let len = header.len();
 
@@ -93,17 +91,17 @@ struct Console<'a> {
 }
 
 impl<'a> Console<'a> {
-    fn new(simpleTextOutputProto: &'a EfiSimpleTextOutputProtocol) -> Console<'a> {
-        simpleTextOutputProto.Reset(false);
+    fn new(simple_text_output_proto: &'a EfiSimpleTextOutputProtocol) -> Console<'a> {
+        simple_text_output_proto.reset(false);
         Console {
-            protocol: simpleTextOutputProto,
+            protocol: simple_text_output_proto,
         }
     }
     // 引数のやつに\0自動的につけたいが...
     fn log(&self, text: *const u16) {
-        self.protocol.OutputString(utf16!("[log] \0").as_ptr());
-        self.protocol.OutputString(text);
-        self.protocol.OutputString(utf16!("\r\n\0").as_ptr());
+        self.protocol.output_string(utf16!("[log] \0").as_ptr());
+        self.protocol.output_string(text);
+        self.protocol.output_string(utf16!("\r\n\0").as_ptr());
     }
 
     fn logng(&self, text: &str) {
@@ -112,21 +110,22 @@ impl<'a> Console<'a> {
         let full_text = prefix + text + "\r\n\0";
         let u16_str:Vec<u16> = full_text.encode_utf16().into_iter().collect();
         let u16_ptr = u16_str.as_ptr();
-        self.protocol.OutputString(u16_ptr);
+        self.protocol.output_string(u16_ptr);
     }
 }
 
 #[no_mangle]
+#[allow(unreachable_code)]
 pub extern "C" fn efi_main(
-    ImageHandle: EfiHandle,
-    SystemTable: &EfiSystemTable,
+    image_handle: EfiHandle,
+    system_table: &EfiSystemTable,
 ) -> EfiStatus {
-    let console = Console::new(SystemTable.ConOut());
-    uefi_alloc::init(SystemTable.BootServices(), SystemTable.ConOut());
+    let console = Console::new(system_table.con_out());
+    uefi_alloc::init(system_table.boot_services(), system_table.con_out());
     console.logng("--- efi_main start ---");
 
     let mut buffer: [EfiMemoryDescriptor; 10] = [Default::default(); 10];
-    let mut memoryMap = MemoryMap {
+    let mut memory_map = MemoryMap {
         buffer_size: buffer.len(),
         buffer: &mut buffer,
         map_size: 0,
@@ -135,14 +134,14 @@ pub extern "C" fn efi_main(
         descriptor_version: 0,
     };
 
-    let res = getMemoryMap(&mut memoryMap, SystemTable.BootServices());
+    let res = get_memory_map(&mut memory_map, system_table.boot_services());
     if res != EfiStatus::Success {
         panic!();
     }
 
     console.log(utf16!("getMemoryMap is done\0").as_ptr());
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
-    open_root_dir(ImageHandle, &mut root_dir, SystemTable.BootServices());
+    open_root_dir(image_handle, &mut root_dir, system_table.boot_services());
     console.log(utf16!("open_root_dir is done\0").as_ptr());
 
     let mut memmap_file: *mut EfiFileProtocol = ptr::null_mut();

@@ -1,7 +1,7 @@
-use core::alloc::{GlobalAlloc, Layout};
 use crate::uefi::{EfiBootServices, EfiMemoryType, EfiSimpleTextOutputProtocol};
+use core::alloc::{GlobalAlloc, Layout};
 use core::panic;
-use core::ptr::{self, NonNull};
+use core::ptr::{NonNull};
 
 use utf16_literal::utf16;
 
@@ -21,21 +21,20 @@ pub fn init(boot_services: &EfiBootServices, cout: &mut EfiSimpleTextOutputProto
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-
-        let memoryType = EfiMemoryType::EfiLoaderData;
+        let memory_type = EfiMemoryType::EfiLoaderData;
         let size = layout.size();
         let align = layout.align();
 
         if align > 8 {
-            unsafe {
-                COUT.unwrap().as_ref().OutputString(utf16!("align g8\0").as_ptr());
-            }
+            COUT.unwrap()
+                .as_ref()
+                .output_string(utf16!("align g8\0").as_ptr());
             panic!()
         } else {
             let res = EFI_BOOT_SERVICES
                 .unwrap()
                 .as_ref()
-                .allocate_pool(memoryType, size);
+                .allocate_pool(memory_type, size);
 
             res.unwrap()
         }
@@ -44,14 +43,12 @@ unsafe impl GlobalAlloc for Allocator {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if layout.align() > 8 {
             // alloc同様に不明
-            unsafe {
-                COUT.unwrap().as_ref().OutputString(utf16!("dealloc\0").as_ptr());
-            }
+            COUT.unwrap()
+                .as_ref()
+                .output_string(utf16!("dealloc\0").as_ptr());
             panic!()
         } else {
-            EFI_BOOT_SERVICES
-            .unwrap()
-            .as_ref().free_pool(ptr);
+            let _ = EFI_BOOT_SERVICES.unwrap().as_ref().free_pool(ptr);
         }
     }
 }

@@ -1,4 +1,4 @@
-use core::{ffi::c_void, ops::Not, task::Context, ptr};
+use core::{ffi::c_void, ptr};
 
 #[derive(PartialEq)]
 #[repr(C)]
@@ -11,66 +11,66 @@ pub struct EfiGuid {
     data_1: u32,
     data_2: u16,
     data_3: u16,
-    data_4: [u8;8]
+    data_4: [u8; 8],
 }
 
 pub const EFI_LOADED_IMAGE_PROTOCOL: EfiGuid = EfiGuid {
     data_1: 0x5b1b31a1,
     data_2: 0x9652,
     data_3: 0x11d2,
-    data_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+    data_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
 };
 
 pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
     data_1: 0x0964e5b22,
     data_2: 0x6459,
     data_3: 0x11d2,
-    data_4: [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+    data_4: [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
 };
 
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
-pub const EFI_FILE_MODE_READ    :u64 = 0x0000000000000001;
-pub const EFI_FILE_MODE_WRITE   :u64 = 0x0000000000000002;
-pub const EFI_FILE_MODE_CREATE  :u64 = 0x8000000000000000;
+pub const EFI_FILE_MODE_READ: u64 = 0x0000000000000001;
+pub const EFI_FILE_MODE_WRITE: u64 = 0x0000000000000002;
+pub const EFI_FILE_MODE_CREATE: u64 = 0x8000000000000000;
 
 type Char16 = u16;
-type NOT_IMPLEMENTED = usize;
+type NotImplemented = usize;
 
 #[repr(C)]
 pub struct EfiTableHeader {
-    Signature: u64,
-    Revision: u32,
-    HeaderSize: u32,
-    Crc32: u32,
-    Reserved: u32,
+    signature: u64,
+    revision: u32,
+    header_size: u32,
+    crc32: u32,
+    reserved: u32,
 }
 
 pub type EfiHandle = *const c_void;
 
 pub struct EfiSimpleTextOutputProtocol {
-    Reset: extern "efiapi" fn(
+    reset: extern "efiapi" fn(
         This: &EfiSimpleTextOutputProtocol,
         ExtendedVerification: bool,
     ) -> EfiStatus,
-    OutputString:
+    output_string:
         extern "efiapi" fn(This: &EfiSimpleTextOutputProtocol, String: *const Char16) -> EfiStatus,
-    _Unuse0: usize,
-    _Unuse1: usize,
-    _Unuse2: usize,
-    _Unuse3: usize,
-    _Unuse4: usize,
-    _Unuse5: usize,
-    _Unuse6: usize,
-    _Unuse7: usize,
+    _unuse0: usize,
+    _unuse1: usize,
+    _unuse2: usize,
+    _unuse3: usize,
+    _unuse4: usize,
+    _unuse5: usize,
+    _unuse6: usize,
+    _unuse7: usize,
 }
 
 impl EfiSimpleTextOutputProtocol {
-    pub fn Reset(&self, ExtendedVerification: bool) -> EfiStatus {
-        unsafe { (self.Reset)(self, ExtendedVerification) }
+    pub fn reset(&self, extended_verification: bool) -> EfiStatus {
+        (self.reset)(self, extended_verification)
     }
 
-    pub fn OutputString(&self, String: *const Char16) -> EfiStatus {
-        unsafe { (self.OutputString)(self, String) }
+    pub fn output_string(&self, string: *const Char16) -> EfiStatus {
+        (self.output_string)(self, string)
     }
 }
 
@@ -79,10 +79,10 @@ pub struct EfiRuntimeService {}
 #[repr(C)]
 pub struct EfiBootServices {
     hdr: EfiTableHeader,
-    raise_tpl: NOT_IMPLEMENTED,
-    restore_tpl: NOT_IMPLEMENTED,
-    allocate_pages: NOT_IMPLEMENTED,
-    free_pages: NOT_IMPLEMENTED,
+    raise_tpl: NotImplemented,
+    restore_tpl: NotImplemented,
+    allocate_pages: NotImplemented,
+    free_pages: NotImplemented,
     get_memory_map: extern "efiapi" fn(
         MemoryMapSize: *mut usize,
         MemoryMap: *mut [EfiMemoryDescriptor],
@@ -90,39 +90,34 @@ pub struct EfiBootServices {
         DescriptorSize: *mut usize,
         DescriptoraVersion: *mut u32,
     ) -> EfiStatus,
-    allocate_pool: extern "efiapi" fn(
-        pooltype: EfiMemoryType,
-        size: usize,
-        buffer: &mut *mut u8
-    )->EfiStatus,
-    free_pool: extern "efiapi" fn (
-        address: *mut u8,
-    ) -> EfiStatus,
-    create_event: NOT_IMPLEMENTED,
-    set_timer: NOT_IMPLEMENTED,
-    wait_for_event: NOT_IMPLEMENTED,
-    signal_event: NOT_IMPLEMENTED,
-    close_event: NOT_IMPLEMENTED,
-    check_event: NOT_IMPLEMENTED,
-    install_protocol_interface: NOT_IMPLEMENTED,
-    reinstall_protocol_interface: NOT_IMPLEMENTED,
-    uninstall_protocol_interface: NOT_IMPLEMENTED,
-    handle_protocol: NOT_IMPLEMENTED,
-    reserved: NOT_IMPLEMENTED,
-    register_protocol_notify: NOT_IMPLEMENTED,
-    locate_handle: NOT_IMPLEMENTED,
-    locate_device_path: NOT_IMPLEMENTED,
-    install_configuration_table: NOT_IMPLEMENTED,
-    load_image: NOT_IMPLEMENTED,
-    start_image: NOT_IMPLEMENTED,
-    exit: NOT_IMPLEMENTED,
-    unload_image: NOT_IMPLEMENTED,
-    exit_boot_service: NOT_IMPLEMENTED,
-    get_next_monotonic_count: NOT_IMPLEMENTED,
-    stall: NOT_IMPLEMENTED,
-    set_watchdog_timer: NOT_IMPLEMENTED,
-    connect_controller: NOT_IMPLEMENTED,
-    disconnect_controller: NOT_IMPLEMENTED,
+    allocate_pool:
+        extern "efiapi" fn(pooltype: EfiMemoryType, size: usize, buffer: &mut *mut u8) -> EfiStatus,
+    free_pool: extern "efiapi" fn(address: *mut u8) -> EfiStatus,
+    create_event: NotImplemented,
+    set_timer: NotImplemented,
+    wait_for_event: NotImplemented,
+    signal_event: NotImplemented,
+    close_event: NotImplemented,
+    check_event: NotImplemented,
+    install_protocol_interface: NotImplemented,
+    reinstall_protocol_interface: NotImplemented,
+    uninstall_protocol_interface: NotImplemented,
+    handle_protocol: NotImplemented,
+    reserved: NotImplemented,
+    register_protocol_notify: NotImplemented,
+    locate_handle: NotImplemented,
+    locate_device_path: NotImplemented,
+    install_configuration_table: NotImplemented,
+    load_image: NotImplemented,
+    start_image: NotImplemented,
+    exit: NotImplemented,
+    unload_image: NotImplemented,
+    exit_boot_service: NotImplemented,
+    get_next_monotonic_count: NotImplemented,
+    stall: NotImplemented,
+    set_watchdog_timer: NotImplemented,
+    connect_controller: NotImplemented,
+    disconnect_controller: NotImplemented,
     open_protocol: extern "efiapi" fn(
         handle: EfiHandle,
         protocol: *const EfiGuid,
@@ -137,37 +132,35 @@ pub struct EfiBootServices {
         agentHandle: EfiHandle,
         cotrollerHandle: EfiHandle,
     ) -> EfiStatus,
-    open_protocol_infomation: NOT_IMPLEMENTED,
-    protocols_per_handle: NOT_IMPLEMENTED,
-    locate_handle_buffer: NOT_IMPLEMENTED,
-    locate_protocol: NOT_IMPLEMENTED,
-    install_multiple_protocol_interface: NOT_IMPLEMENTED,
-    uninstall_multiple_protocol_interface: NOT_IMPLEMENTED,
-    calculate_crc32: NOT_IMPLEMENTED,
-    copy_mem: NOT_IMPLEMENTED,
-    set_mem: NOT_IMPLEMENTED,
-    create_event_ex: NOT_IMPLEMENTED,
+    open_protocol_infomation: NotImplemented,
+    protocols_per_handle: NotImplemented,
+    locate_handle_buffer: NotImplemented,
+    locate_protocol: NotImplemented,
+    install_multiple_protocol_interface: NotImplemented,
+    uninstall_multiple_protocol_interface: NotImplemented,
+    calculate_crc32: NotImplemented,
+    copy_mem: NotImplemented,
+    set_mem: NotImplemented,
+    create_event_ex: NotImplemented,
 }
 
 impl EfiBootServices {
     pub fn get_memory_map(
         &self,
-        MemoryMapSize: &mut usize,
-        MemoryMap: &mut [EfiMemoryDescriptor],
-        MapKey: &mut usize,
-        DescriptorSize: &mut usize,
-        DescriptoraVersion: &mut u32,
+        memory_map_size: &mut usize,
+        memory_map: &mut [EfiMemoryDescriptor],
+        map_key: &mut usize,
+        descriptor_size: &mut usize,
+        descriptora_version: &mut u32,
     ) -> EfiStatus {
-        unsafe {
-            (self.get_memory_map)(
-                MemoryMapSize as *mut usize,
-                MemoryMap as *mut [EfiMemoryDescriptor],
-                // (MemoryMap as *mut [u8]) as *mut [EfiMemoryDescriptor],
-                MapKey as *mut usize,
-                DescriptorSize as *mut usize,
-                DescriptoraVersion as *mut u32,
-            )
-        }
+        (self.get_memory_map)(
+            memory_map_size as *mut usize,
+            memory_map as *mut [EfiMemoryDescriptor],
+            // (MemoryMap as *mut [u8]) as *mut [EfiMemoryDescriptor],
+            map_key as *mut usize,
+            descriptor_size as *mut usize,
+            descriptora_version as *mut u32,
+        )
     }
 
     pub fn open_protocol(
@@ -179,16 +172,14 @@ impl EfiBootServices {
         controller_handle: EfiHandle,
         attributes: u32,
     ) -> EfiStatus {
-        unsafe {
-            (self.open_protocol)(
-                handle,
-                protocol as *const EfiGuid,
-                interface,
-                agent_handle,
-                controller_handle,
-                attributes,
-            )
-        }
+        (self.open_protocol)(
+            handle,
+            protocol as *const EfiGuid,
+            interface,
+            agent_handle,
+            controller_handle,
+            attributes,
+        )
     }
 
     pub fn close_protocol(
@@ -198,14 +189,10 @@ impl EfiBootServices {
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
     ) -> EfiStatus {
-        unsafe { (self.close_protocol)(handle, protocol, agent_handle, controller_handle) }
+        (self.close_protocol)(handle, protocol, agent_handle, controller_handle)
     }
 
-    pub fn allocate_pool(
-        &self,
-        pooltype: EfiMemoryType,
-        size: usize,
-    ) -> Result<*mut u8, ()>{
+    pub fn allocate_pool(&self, pooltype: EfiMemoryType, size: usize) -> Result<*mut u8, ()> {
         let mut buffer = ptr::null_mut();
         let buffer_ptr = &mut buffer;
         if (self.allocate_pool)(pooltype, size, buffer_ptr) as i32 == 0 {
@@ -216,10 +203,7 @@ impl EfiBootServices {
         }
     }
 
-    pub fn free_pool(
-        &self,
-        buffer: *mut u8,
-    ) -> Result<(), ()> {
+    pub fn free_pool(&self, buffer: *mut u8) -> Result<(), ()> {
         if (self.free_pool)(buffer) == EfiStatus::Success {
             Ok(())
         } else {
@@ -231,11 +215,11 @@ impl EfiBootServices {
 #[derive(Default, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct EfiMemoryDescriptor {
-    Type: u32,
-    PhysicalStart: EfiPhysicalAddress,
-    VirtualStart: EfiVirtualAddress,
-    NumberOfPages: u64,
-    Attribute: u64,
+    memory_type: u32,
+    physical_start: EfiPhysicalAddress,
+    virtual_start: EfiVirtualAddress,
+    number_of_pages: u64,
+    attribute: u64,
 }
 
 pub type EfiPhysicalAddress = u64;
@@ -244,19 +228,19 @@ pub struct EfiConfigurationTable {}
 
 #[repr(C)]
 pub struct EfiSystemTable {
-    Hdr: EfiTableHeader,
-    FirmwareVendor: *const Char16,
-    FirmwareRevision: u32,
-    ConsoleInHandle: EfiHandle,
-    ConIn: *mut EfiSimpleTextInputProtocol,
-    ConsoleOutHandle: EfiHandle,
-    ConOut: *mut EfiSimpleTextOutputProtocol,
-    StandardErrorHandle: EfiHandle,
-    StdErr: *mut EfiSimpleTextOutputProtocol,
-    RuntimeServices: *mut EfiRuntimeService,
-    BootServices: *mut EfiBootServices,
-    NumberOfTableEntries: usize,
-    EConfigurationTable: *mut EfiConfigurationTable,
+    hdr: EfiTableHeader,
+    firmware_vendor: *const Char16,
+    firmware_revision: u32,
+    console_in_handle: EfiHandle,
+    con_in: *mut EfiSimpleTextInputProtocol,
+    console_out_handle: EfiHandle,
+    con_out: *mut EfiSimpleTextOutputProtocol,
+    standard_error_handle: EfiHandle,
+    std_err: *mut EfiSimpleTextOutputProtocol,
+    runtime_services: *mut EfiRuntimeService,
+    boot_services: *mut EfiBootServices,
+    number_of_table_entries: usize,
+    econfiguration_table: *mut EfiConfigurationTable,
 }
 
 pub struct EfiFileIoToken {}
@@ -316,28 +300,24 @@ impl EfiFileProtocol {
         new_handle: &mut *mut Self,
         file_name: *const Char16,
         open_mode: u64,
-        attribute: u64
+        attribute: u64,
     ) -> EfiStatus {
-        unsafe { (self.open)(self, new_handle, file_name, open_mode, attribute) }
+        (self.open)(self, new_handle, file_name, open_mode, attribute)
     }
 
-    pub fn write(
-        &self, 
-        buffer_size: usize,
-        buffer: &str
-    ) -> EfiStatus {
+    pub fn write(&self, buffer_size: usize, buffer: &str) -> EfiStatus {
         (self.write)(self, &buffer_size, buffer.as_ptr() as *const c_void)
     }
 }
 
-pub struct efiDevicePathProtocol{}
+pub struct EfiDevicePathProtocol {}
 #[repr(C)]
 pub struct EfiLoadedImageProtocol<'a> {
     revision: u32,
     parent_handle: EfiHandle,
     system_table: EfiSystemTable,
     pub device_handle: EfiHandle,
-    file_path: &'a efiDevicePathProtocol,
+    file_path: &'a EfiDevicePathProtocol,
     reserved: &'a c_void,
     load_options_size: u32,
     load_options: &'a c_void,
@@ -379,20 +359,17 @@ pub struct EfiSimpleFileSystemProtocol {
 }
 
 impl EfiSimpleFileSystemProtocol {
-    pub fn open_volume(
-        &mut self,
-        root: &mut *mut EfiFileProtocol,
-    ) -> EfiStatus {
+    pub fn open_volume(&mut self, root: &mut *mut EfiFileProtocol) -> EfiStatus {
         (self.open_volume)(self, root)
     }
 }
 
 impl EfiSystemTable {
-    pub fn ConOut(&self) -> &mut EfiSimpleTextOutputProtocol {
-        unsafe { &mut *self.ConOut }
+    pub fn con_out(&self) -> &mut EfiSimpleTextOutputProtocol {
+        unsafe { &mut *self.con_out }
     }
 
-    pub fn BootServices(&self) -> &EfiBootServices {
-        unsafe { &*self.BootServices }
+    pub fn boot_services(&self) -> &EfiBootServices {
+        unsafe { &*self.boot_services }
     }
 }
