@@ -1,3 +1,4 @@
+use core::ptr::{null_mut, null};
 use core::{ffi::c_void, ptr};
 
 use crate::print;
@@ -10,6 +11,7 @@ pub enum EfiStatus {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct EfiGuid {
     data_1: u32,
     data_2: u16,
@@ -19,7 +21,7 @@ pub struct EfiGuid {
 
 pub const EFI_LOADED_IMAGE_PROTOCOL: EfiGuid = EfiGuid {
     data_1: 0x5b1b31a1,
-    data_2: 0x9652,
+    data_2: 0x9562,
     data_3: 0x11d2,
     data_4: [0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
 };
@@ -40,6 +42,7 @@ type Char16 = u16;
 type NotImplemented = usize;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct EfiTableHeader {
     signature: u64,
     revision: u32,
@@ -123,8 +126,8 @@ pub struct EfiBootServices {
     disconnect_controller: NotImplemented,
     open_protocol: extern "efiapi" fn(
         handle: EfiHandle,
-        protocol: *const EfiGuid,
-        interface: *mut *mut c_void,
+        protocol: &EfiGuid,
+        interface: &mut *mut c_void,
         agentHandle: EfiHandle,
         controllerHandle: EfiHandle,
         attributes: u32,
@@ -166,26 +169,36 @@ impl EfiBootServices {
         )
     }
 
-    pub fn open_protocol(
+    pub unsafe fn open_protocol(
         &self,
         handle: EfiHandle,
         protocol: &EfiGuid,
-        interface: *mut *mut c_void,
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
         attributes: u32,
-    ) -> Result<(), EfiStatus> {
+    ) -> Result<&c_void, EfiStatus> {
+        let mut _interface: *mut c_void = null_mut();
+        let interface_ptr = &mut _interface;
+
+        // println!("{:?}", handle);
+        // println!("{:?}", protocol);
+        // println!("{:?}", agent_handle);
+        // println!("{:?}", controller_handle);
+        // println!("{:?}", attributes);
         let _res = (self.open_protocol)(
             handle,
-            protocol as *const EfiGuid,
-            interface,
+            protocol,
+            interface_ptr,
             agent_handle,
             controller_handle,
             attributes,
         );
 
         if _res == EfiStatus::Success {
-            Ok(())
+            if interface_ptr.is_null() {
+                println!("RETURN NULL");
+            }
+            Ok(interface_ptr.as_ref().unwrap())
         } else {
             Err(_res)
         }
@@ -236,6 +249,7 @@ pub type EfiVirtualAddress = u64;
 pub struct EfiConfigurationTable {}
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct EfiSystemTable {
     hdr: EfiTableHeader,
     firmware_vendor: *const Char16,
@@ -319,12 +333,15 @@ impl EfiFileProtocol {
     }
 }
 
+#[repr(C)]
+#[derive(Debug)]
 pub struct EfiDevicePathProtocol {}
+
 #[repr(C)]
 pub struct EfiLoadedImageProtocol<'a> {
     revision: u32,
     parent_handle: EfiHandle,
-    system_table: EfiSystemTable,
+    system_table: &'a EfiSystemTable,
     pub device_handle: EfiHandle,
     file_path: &'a EfiDevicePathProtocol,
     reserved: &'a c_void,
@@ -338,6 +355,7 @@ pub struct EfiLoadedImageProtocol<'a> {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub enum EfiMemoryType {
     EfiReservedMemoryType = 0,
     EfiLoaderCode = 1,
@@ -368,12 +386,14 @@ pub struct EfiSimpleFileSystemProtocol {
 }
 
 impl EfiSimpleFileSystemProtocol {
-    pub fn open_volume(&mut self, root: &mut *mut EfiFileProtocol) -> Result<(), EfiStatus> {
+    pub unsafe fn open_volume(&self) -> Result<&EfiFileProtocol, EfiStatus> {
+        let mut efi_file_proto = ptr::null_mut();
+        let mut efi_file_proto_ptr = &mut efi_file_proto;
         println!("Before calling");
-        let _res = (self.open_volume)(self, root);
+        let _res = (self.open_volume)(self, efi_file_proto_ptr);
         println!("After calling");
         if _res == EfiStatus::Success {
-            Ok(())
+            Ok(efi_file_proto_ptr.as_ref().unwrap())
         } else {
             Err(_res)
         }

@@ -5,10 +5,10 @@
 
 // extern crate alloc;
 
-use core::panic::PanicInfo;
-use core::ptr::{null, null_mut, self};
-use uefi::*;
 use core::ffi::c_void;
+use core::panic::PanicInfo;
+use core::ptr::{self, null, null_mut};
+use uefi::*;
 use utf16_literal::utf16;
 
 extern crate alloc;
@@ -16,15 +16,15 @@ mod uefi_alloc;
 
 // extern crate alloc;
 
-mod uefi;
 mod console;
+mod uefi;
 
 use console::*;
 
 #[derive(Debug)]
 struct MemoryMap<'a> {
     buffer_size: usize,
-    buffer: &'a mut[EfiMemoryDescriptor],
+    buffer: &'a mut [EfiMemoryDescriptor],
     map_size: usize,
     map_key: usize,
     descriptor_size: usize,
@@ -57,43 +57,46 @@ fn save_memory_map(map: &MemoryMap, file: &EfiFileProtocol) -> EfiStatus {
 
 fn open_root_dir(
     image_handle: EfiHandle,
-    root: &mut *mut EfiFileProtocol,
     bs: &EfiBootServices,
-) -> EfiStatus {
-    let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
-    let mut fs: *mut EfiSimpleFileSystemProtocol = null_mut();
+) -> Result<&EfiFileProtocol, EfiStatus> {
+    // let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
+    // let mut fs: *mut EfiSimpleFileSystemProtocol = null_mut();
 
-    bs.open_protocol(
-        image_handle,
-        &EFI_LOADED_IMAGE_PROTOCOL,
-        (&mut loaded_image as *mut *mut EfiLoadedImageProtocol) as *mut *mut c_void,
-        image_handle,
-        null(),
-        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-    ).unwrap();
+    unsafe {
+        let _loaded_image = bs.open_protocol(
+            image_handle,
+            &EFI_LOADED_IMAGE_PROTOCOL,
+            image_handle,
+            null(),
+            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+        ).unwrap();
 
-    bs.open_protocol(
-        unsafe{(*loaded_image).device_handle}, 
-        &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-        (&mut fs as *mut *mut EfiSimpleFileSystemProtocol) as *mut *mut c_void,
-        image_handle,
-        null(),
-        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL
-    ).unwrap();
+        println!("1st done");
 
-    //こいつが止めてる
-    unsafe{(*fs).open_volume(root)}.unwrap();
+        let loaded_image = ((_loaded_image as *const _) as *const EfiLoadedImageProtocol).as_ref().unwrap();
 
-    EfiStatus::Success
+        // println!("{:?}", loaded_image);
+
+        let _fs = bs.open_protocol(
+            loaded_image.device_handle,
+            &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+            image_handle,
+            null(),
+            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+        )
+        .unwrap();
+
+        println!("2nd done");
+
+        let fs = ((_fs as *const _) as *const EfiSimpleFileSystemProtocol).as_ref().unwrap();
+
+        fs.open_volume()
+    }
 }
-
 
 #[no_mangle]
 #[allow(unreachable_code)]
-pub extern "C" fn efi_main(
-    image_handle: EfiHandle,
-    system_table: &EfiSystemTable,
-) -> EfiStatus {
+pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTable) -> EfiStatus {
     uefi_alloc::init(system_table.boot_services(), system_table.con_out());
     console::init(system_table.con_out());
     println!("---- efi_main -----");
@@ -117,13 +120,18 @@ pub extern "C" fn efi_main(
     // console.log(utf16!("getMemoryMap is done\0").as_ptr());
     println!("get_memory_map() is done !");
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
-    open_root_dir(image_handle, &mut root_dir, system_table.boot_services());
+    let efi_file_proto = open_root_dir(image_handle, system_table.boot_services()).unwrap();
     println!("open_root_dir() is done");
 
     let mut memmap_file: *mut EfiFileProtocol = ptr::null_mut();
 
-    unsafe{
-        (*root_dir).open(&mut memmap_file, utf16!("memmap").as_ptr(), EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
+    unsafe {
+        (*root_dir).open(
+            &mut memmap_file,
+            utf16!("memmap").as_ptr(),
+            EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
+            0,
+        );
     }
 
     // save_memory_map(&memoryMap, &memmap_file, _conout);
