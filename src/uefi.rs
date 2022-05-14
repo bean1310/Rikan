@@ -1,7 +1,10 @@
-use core::ptr::{null_mut, null};
+use alloc::string::String;
+use alloc::vec::{Vec, self};
+use core::ops::Index;
+use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
 
-use crate::print;
+use crate::{print};
 use crate::println;
 
 #[derive(PartialEq, Debug)]
@@ -34,11 +37,24 @@ pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
 };
 
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
-pub const EFI_FILE_MODE_READ: u64 = 0x0000000000000001;
-pub const EFI_FILE_MODE_WRITE: u64 = 0x0000000000000002;
-pub const EFI_FILE_MODE_CREATE: u64 = 0x8000000000000000;
+
+
+#[repr(u64)]
+pub enum EfiFileAttribute {
+    // This value is NOT defined on UEFI Spec.
+    None = 0x0,
+    // These values below are defined on UEFI Spec.
+    ReadOnly = 0x1,
+    Hidden = 0x2,
+    System = 0x4,
+    Reserved = 0x8,
+    Directory = 0x10,
+    Archive = 0x20,
+    ValidAttribute = 0x37,
+}
 
 type Char16 = u16;
+
 type NotImplemented = usize;
 
 #[repr(C)]
@@ -90,11 +106,11 @@ pub struct EfiBootServices {
     allocate_pages: NotImplemented,
     free_pages: NotImplemented,
     get_memory_map: extern "efiapi" fn(
-        MemoryMapSize: *mut usize,
-        MemoryMap: *mut [EfiMemoryDescriptor],
-        MapKey: *mut usize,
-        DescriptorSize: *mut usize,
-        DescriptoraVersion: *mut u32,
+        MemoryMapSize: &mut usize,
+        MemoryMap: *mut EfiMemoryDescriptor,
+        MapKey: &mut usize,
+        DescriptorSize: &mut usize,
+        DescriptoraVersion: &mut u32,
     ) -> EfiStatus,
     allocate_pool:
         extern "efiapi" fn(pooltype: EfiMemoryType, size: usize, buffer: &mut *mut u8) -> EfiStatus,
@@ -151,22 +167,30 @@ pub struct EfiBootServices {
 }
 
 impl EfiBootServices {
+    /// # Arguments
+    /// * `memory_map_buffer` EfiMemoryDescriptor型の書き込まれる先のbuffer
     pub fn get_memory_map(
         &self,
-        memory_map_size: &mut usize,
-        memory_map: &mut [EfiMemoryDescriptor],
-        map_key: &mut usize,
-        descriptor_size: &mut usize,
-        descriptora_version: &mut u32,
-    ) -> EfiStatus {
-        (self.get_memory_map)(
-            memory_map_size as *mut usize,
-            memory_map as *mut [EfiMemoryDescriptor],
-            // (MemoryMap as *mut [u8]) as *mut [EfiMemoryDescriptor],
-            map_key as *mut usize,
-            descriptor_size as *mut usize,
-            descriptora_version as *mut u32,
-        )
+        memory_map_buffer: &mut [EfiMemoryDescriptor]
+    ) -> Result<(usize, usize, usize, u32), EfiStatus> {
+        let mut memory_map_size = core::mem::size_of::<EfiMemoryDescriptor>() * memory_map_buffer.len();
+        // let buffer_ptr = memory_map_buffer.as_mut_ptr();
+        let mut map_key = 0;
+        let mut descriptor_size = 0;
+        let mut descriptor_version = 0;
+        let _res = (self.get_memory_map)(
+            &mut memory_map_size,
+            memory_map_buffer.as_mut_ptr(),
+            &mut map_key,
+            &mut descriptor_size,
+            &mut descriptor_version,
+        );
+
+        if _res == EfiStatus::Success {
+            Ok((memory_map_size, map_key, descriptor_size, descriptor_version))
+        } else {
+            Err(_res)
+        }
     }
 
     pub unsafe fn open_protocol(
@@ -317,15 +341,39 @@ pub struct EfiFileProtocol {
     flash_ex: extern "efiapi" fn(this: &EfiFileProtocol, token: &EfiFileIoToken) -> EfiStatus,
 }
 
+// note:
+// uefi-rsでは、使い方を3つに絞ってやってた
+// ありっちゃあり。なので採用した。
+#[derive(Debug)]
+#[repr(u64)]
+pub enum EfiFileOpenMode {
+    Read = 0x1,
+    ReadWrite = 0x2 | 0x1,
+    CreateReadWrite = 0x8000_0000_0000_0000 | 0x1 | 0x2,
+}
+
 impl EfiFileProtocol {
     pub fn open(
         &self,
-        new_handle: &mut *mut Self,
-        file_name: *const Char16,
-        open_mode: u64,
-        attribute: u64,
-    ) -> EfiStatus {
-        (self.open)(self, new_handle, file_name, open_mode, attribute)
+        file_name: &str,
+        open_mode: EfiFileOpenMode,
+        attribute: EfiFileAttribute,
+    ) -> Result<&EfiFileProtocol, EfiStatus> {
+        let mut _new_handle = null_mut();
+        let new_handle_ptr = &mut _new_handle;
+        let u16ed_filename = str_to_uefi_utf16(file_name);
+        let _res = (self.open)(
+            self,
+            new_handle_ptr,
+            u16ed_filename,
+            open_mode as u64,
+            attribute as u64,
+        );
+        if _res == EfiStatus::Success {
+            unsafe { Ok(new_handle_ptr.as_ref().unwrap()) }
+        } else {
+            Err(_res)
+        }
     }
 
     pub fn write(&self, buffer_size: usize, buffer: &str) -> EfiStatus {
@@ -408,4 +456,11 @@ impl EfiSystemTable {
     pub fn boot_services(&self) -> &EfiBootServices {
         unsafe { &*self.boot_services }
     }
+}
+
+fn str_to_uefi_utf16(text: &str) -> *const u16 {
+    let _text = String::from(text);
+    let _null_terminated_text = _text + "\0";
+    let _u16_str: Vec<u16> = _null_terminated_text.encode_utf16().into_iter().collect();
+    _u16_str.as_ptr()
 }
