@@ -1,2 +1,5 @@
 disk.img
 target
+logs/*
+*.S
+workspace.code-workspace
