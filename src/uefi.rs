@@ -1,16 +1,50 @@
 use alloc::string::String;
 use alloc::vec::{Vec, self};
 use core::ops::Index;
+use core::panic;
 use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
 
 use crate::{print};
 use crate::println;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(C)]
 pub enum EfiStatus {
-    Success = 0,
+    Success,
+    LoadError,
+    InvalidParameter,
+    Unsupprted, 
+    BadBufferSize, 
+    BufferTooSmall,
+    NotReady,
+    DeviceError, 
+    WriteProtected, 
+    OutOfResources,
+    VolumeCorrupted,
+    VolumeFull,
+    NoMedia, 
+    MediaChanged,
+    NotFound,
+    AccessDenied,
+    NoResponse, 
+    NoMapping,
+    Timeout,
+    NotStarted,
+    AlreadyStarted,
+    Aborted,
+    IcmpError,
+    TftpError,
+    ProtocolError,
+    IncompatibleVersion,
+    SecurityViolation,
+    CrcError,
+    EndOfMedia,
+    EndOfFile = 31,
+    InvalidLanguage,
+    CompromisedData,
+    IpAddressConflict,
+    HttpError
 }
 
 #[repr(C)]
@@ -38,7 +72,7 @@ pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
 
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
 
-
+#[derive(Debug, Clone, Copy)]
 #[repr(u64)]
 pub enum EfiFileAttribute {
     // This value is NOT defined on UEFI Spec.
@@ -261,11 +295,11 @@ impl EfiBootServices {
 #[derive(Default, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct EfiMemoryDescriptor {
-    memory_type: u32,
-    physical_start: EfiPhysicalAddress,
-    virtual_start: EfiVirtualAddress,
-    number_of_pages: u64,
-    attribute: u64,
+    pub memory_type: u32,
+    pub physical_start: EfiPhysicalAddress,
+    pub virtual_start: EfiVirtualAddress,
+    pub number_of_pages: u64,
+    pub attribute: u64,
 }
 
 pub type EfiPhysicalAddress = u64;
@@ -291,9 +325,10 @@ pub struct EfiSystemTable {
 }
 
 pub struct EfiFileIoToken {}
+
 #[repr(C)]
 pub struct EfiFileProtocol {
-    revision: u64,
+    pub revision: u64,
     open: extern "efiapi" fn(
         this: &EfiFileProtocol,
         newHandle: &mut *mut EfiFileProtocol,
@@ -310,7 +345,7 @@ pub struct EfiFileProtocol {
     ) -> EfiStatus,
     write: extern "efiapi" fn(
         this: &EfiFileProtocol,
-        bufferSize: &usize,
+        bufferSize: &mut usize,
         buffer: *const c_void,
     ) -> EfiStatus,
     get_position: extern "efiapi" fn(this: &EfiFileProtocol, position: &u64) -> EfiStatus,
@@ -344,7 +379,7 @@ pub struct EfiFileProtocol {
 // note:
 // uefi-rsでは、使い方を3つに絞ってやってた
 // ありっちゃあり。なので採用した。
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u64)]
 pub enum EfiFileOpenMode {
     Read = 0x1,
@@ -359,25 +394,45 @@ impl EfiFileProtocol {
         open_mode: EfiFileOpenMode,
         attribute: EfiFileAttribute,
     ) -> Result<&EfiFileProtocol, EfiStatus> {
-        let mut _new_handle = null_mut();
-        let new_handle_ptr = &mut _new_handle;
-        let u16ed_filename = str_to_uefi_utf16(file_name);
+        let mut new_handle = ptr::null_mut();
+        let new_handle_ptr = &mut new_handle;
+
+        let _text = String::from(file_name);
+        let _null_terminated_text = _text + "\0";
+        let u16_str: Vec<u16> = _null_terminated_text.encode_utf16().into_iter().collect();
+        let u16ed_filename_ptr = u16_str.as_ptr();
+
         let _res = (self.open)(
-            self,
+            &self,
             new_handle_ptr,
-            u16ed_filename,
+            u16ed_filename_ptr,
             open_mode as u64,
             attribute as u64,
         );
         if _res == EfiStatus::Success {
-            unsafe { Ok(new_handle_ptr.as_ref().unwrap()) }
+            unsafe { Ok(new_handle.as_ref().unwrap()) }
         } else {
             Err(_res)
         }
     }
 
-    pub fn write(&self, buffer_size: usize, buffer: &str) -> EfiStatus {
-        (self.write)(self, &buffer_size, buffer.as_ptr() as *const c_void)
+    pub fn write(&self, buffer_size: usize, buffer: &str) -> Result<usize, EfiStatus> {
+        let mut written_buffer_size = buffer_size;
+        let _res = (self.write)(self, &mut written_buffer_size, buffer.as_ptr() as *const _);
+        if _res == EfiStatus::Success {
+            Ok(written_buffer_size)
+        } else {
+            Err(_res)
+        }
+    }
+
+    pub fn close(&self) -> Result<EfiStatus, EfiStatus> {
+        let _res = (self.close)(self);
+        if _res == EfiStatus::Success {
+            Ok(_res)
+        } else {
+            Err(_res)
+        }
     }
 }
 
@@ -437,9 +492,7 @@ impl EfiSimpleFileSystemProtocol {
     pub unsafe fn open_volume(&self) -> Result<&EfiFileProtocol, EfiStatus> {
         let mut efi_file_proto = ptr::null_mut();
         let mut efi_file_proto_ptr = &mut efi_file_proto;
-        println!("Before calling");
         let _res = (self.open_volume)(self, efi_file_proto_ptr);
-        println!("After calling");
         if _res == EfiStatus::Success {
             Ok(efi_file_proto_ptr.as_ref().unwrap())
         } else {
@@ -458,9 +511,11 @@ impl EfiSystemTable {
     }
 }
 
-fn str_to_uefi_utf16(text: &str) -> *const u16 {
-    let _text = String::from(text);
-    let _null_terminated_text = _text + "\0";
-    let _u16_str: Vec<u16> = _null_terminated_text.encode_utf16().into_iter().collect();
-    _u16_str.as_ptr()
-}
+// std環境と違ってなぜか呼び出し側から見るポインタの先の値が変わってしまう
+// fn str_to_uefi_utf16(text: &str) -> Vec<u16> {
+//     let _text = String::from(text);
+//     let _null_terminated_text = _text + "\0";
+//     let u16_str: Vec<u16> = _null_terminated_text.encode_utf16().into_iter().collect();
+//     println!("DEBUG: {:p}: {:x}", u16_str.as_ptr(), *(u16_str.as_ptr()));
+//     u16_str
+// }

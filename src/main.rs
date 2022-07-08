@@ -8,6 +8,7 @@
 use core::ffi::c_void;
 use core::panic::PanicInfo;
 use core::ptr::{self, null, null_mut};
+use alloc::format;
 use uefi::*;
 use utf16_literal::utf16;
 
@@ -21,15 +22,50 @@ mod uefi;
 
 use console::*;
 
-fn save_memory_map(map: &EfiMemoryDescriptor, file: &EfiFileProtocol) -> EfiStatus {
-    let header = "Index, Type, Type(name), PhysicalStart, NumberOfPages, Attribute\n";
+fn get_memory_map_unicode(memory_type_number: u32) -> &'static str {
+    match memory_type_number {
+        0 => "EfiReservedMemoryType",
+        1 => "EfiLoaderCode",
+        2 => "EfiLoaderData",
+        3 => "EfiBootServicesCode",
+        4 => "EfiBootServicesData",
+        5 => "EfiRuntimeServiceCode",
+        6 => "EfiRuntimeServiceData",
+        7 => "EfiConventionalMemory",
+        8 => "EfiUnusableMemory",
+        9 => "EfiACPIReclaimMemory",
+        10 => "EfiACPIMemoryNVS",
+        11 => "EfiMemoryMappedIO",
+        12 => "EfiMemoryMappedIOPortSpace",
+        13 => "EfiPalCode",
+        14 => "EfiPersistentMemory",
+        15 => "EfiUnacceptedMemoryType",
+        16 => "EfiMaxMemoryType",
+        _ => "Unknown Memory Type"
+    }
+}
+
+fn save_memory_map(map: &[EfiMemoryDescriptor], file: &EfiFileProtocol) -> EfiStatus {
+    let header = "Index,\tType,\tType(name),\tPhysicalStart,\tNumberOfPages,\tAttribute\n";
     let len = header.len();
 
-    file.write(len, header);
-    // こういうところで動的メモリ確保が使いたい
-    // let display_data = format!("map->buffer = {:x}, map->map_size = {:x}", map.buffer, map.buffer_size);
+    let written_size = file.write(len, header).unwrap();
 
-    // cout.OutputString(utf16!(display_data).as_ptr())
+    println!("written_size is {:}", written_size);
+
+    if written_size != len {
+        panic!("Failed to write completely. len:{} done:{}", len, written_size);
+    }
+    
+    let mut index = 0;
+    // MemoryDescriptorSizeはサイズ変わる場合があるのでline.descriptor_sizeを足し算してそのアドレスからみないとダメ。
+    for line in map {
+        let mem_region_info = format!("{:},\t{:x},\t{:},\t{:x},\t{:x},\t{:x}\n", index, line.memory_type, get_memory_map_unicode(line.memory_type), line.physical_start, line.number_of_pages, line.attribute);
+        file.write(mem_region_info.len(), &mem_region_info);
+        index += 1;
+    }
+
+    file.close().unwrap();
 
     EfiStatus::Success
 }
@@ -95,8 +131,6 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         .get_memory_map(&mut memory_map)
         .unwrap();
 
-    println!("{:?}", memory_map);
-
     println!("get_memory_map() is done !");
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
     let efi_file_proto = open_root_dir(image_handle, system_table.boot_services()).unwrap();
@@ -110,7 +144,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         )
         .unwrap();
 
-    // save_memory_map(&memoryMap, &memmap_file, _conout);
+    save_memory_map(&memory_map, &opened_handle);
     //ここから
     // _conout.OutputString(utf16!("pass1.0\r\n").as_ptr());
     // let display_data = format!("n");
