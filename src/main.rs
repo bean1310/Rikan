@@ -5,12 +5,11 @@
 
 // extern crate alloc;
 
+use alloc::format;
 use core::ffi::c_void;
 use core::panic::PanicInfo;
 use core::ptr::{self, null, null_mut};
-use alloc::format;
 use uefi::*;
-use utf16_literal::utf16;
 
 extern crate alloc;
 mod uefi_alloc;
@@ -41,11 +40,16 @@ fn get_memory_map_unicode(memory_type_number: u32) -> &'static str {
         14 => "EfiPersistentMemory",
         15 => "EfiUnacceptedMemoryType",
         16 => "EfiMaxMemoryType",
-        _ => "Unknown Memory Type"
+        _ => "Unknown Memory Type",
     }
 }
 
-fn save_memory_map(map: &[EfiMemoryDescriptor], file: &EfiFileProtocol) -> EfiStatus {
+fn save_memory_map(
+    map: &[u8],
+    file: &EfiFileProtocol,
+    descriptor_size: usize,
+    map_size: usize,
+) -> EfiStatus {
     let header = "Index,\tType,\tType(name),\tPhysicalStart,\tNumberOfPages,\tAttribute\n";
     let len = header.len();
 
@@ -54,15 +58,34 @@ fn save_memory_map(map: &[EfiMemoryDescriptor], file: &EfiFileProtocol) -> EfiSt
     println!("written_size is {:}", written_size);
 
     if written_size != len {
-        panic!("Failed to write completely. len:{} done:{}", len, written_size);
+        panic!(
+            "Failed to write completely. len:{} done:{}",
+            len, written_size
+        );
     }
-    
+
     let mut index = 0;
-    // MemoryDescriptorSizeはサイズ変わる場合があるのでline.descriptor_sizeを足し算してそのアドレスからみないとダメ。
-    for line in map {
-        let mem_region_info = format!("{:},\t{:x},\t{:},\t{:x},\t{:x},\t{:x}\n", index, line.memory_type, get_memory_map_unicode(line.memory_type), line.physical_start, line.number_of_pages, line.attribute);
+    let mut offset = 0;
+
+    while offset < map_size {
+        let memory_descriptor = unsafe {
+            (map.as_ptr().add(offset) as *const EfiMemoryDescriptor)
+                .as_ref()
+                .unwrap()
+        };
+        let mem_region_info = format!(
+            "{:},\t0x{:x},\t{:},\t0x{:x},\t0x{:x},\t0x{:x}\n",
+            index,
+            memory_descriptor.memory_type,
+            get_memory_map_unicode(memory_descriptor.memory_type),
+            memory_descriptor.physical_start,
+            memory_descriptor.number_of_pages,
+            memory_descriptor.attribute
+        );
         file.write(mem_region_info.len(), &mem_region_info);
+
         index += 1;
+        offset += descriptor_size;
     }
 
     file.close().unwrap();
@@ -124,9 +147,10 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
     println!("---- efi_main -----");
     println!("{} + {} = {}", 10, 20, 10 + 20);
 
-    let mut memory_map: [EfiMemoryDescriptor; 60] = [Default::default(); 60];
+    // let mut memory_map: [EfiMemoryDescriptor; 60] = [Default::default(); 60];
+    let mut memory_map: [u8; 4096] = [0; 4096];
 
-    let (_, _, _, _) = system_table
+    let (map_size, _, descriptor_size, _) = system_table
         .boot_services()
         .get_memory_map(&mut memory_map)
         .unwrap();
@@ -144,15 +168,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         )
         .unwrap();
 
-    save_memory_map(&memory_map, &opened_handle);
-    //ここから
-    // _conout.OutputString(utf16!("pass1.0\r\n").as_ptr());
-    // let display_data = format!("n");
-
-    // _conout.OutputString(utf16!("pass1.1").as_ptr());
-    // _conout.OutputString(display_data as *const u16);
-
-    // _conout.OutputString(utf16!("pass2").as_ptr());
+    save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size);
 
     loop {}
 

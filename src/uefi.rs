@@ -1,11 +1,11 @@
 use alloc::string::String;
-use alloc::vec::{Vec, self};
+use alloc::vec::{self, Vec};
 use core::ops::Index;
 use core::panic;
 use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
 
-use crate::{print};
+use crate::print;
 use crate::println;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -14,20 +14,20 @@ pub enum EfiStatus {
     Success,
     LoadError,
     InvalidParameter,
-    Unsupprted, 
-    BadBufferSize, 
+    Unsupprted,
+    BadBufferSize,
     BufferTooSmall,
     NotReady,
-    DeviceError, 
-    WriteProtected, 
+    DeviceError,
+    WriteProtected,
     OutOfResources,
     VolumeCorrupted,
     VolumeFull,
-    NoMedia, 
+    NoMedia,
     MediaChanged,
     NotFound,
     AccessDenied,
-    NoResponse, 
+    NoResponse,
     NoMapping,
     Timeout,
     NotStarted,
@@ -44,7 +44,7 @@ pub enum EfiStatus {
     InvalidLanguage,
     CompromisedData,
     IpAddressConflict,
-    HttpError
+    HttpError,
 }
 
 #[repr(C)]
@@ -141,7 +141,7 @@ pub struct EfiBootServices {
     free_pages: NotImplemented,
     get_memory_map: extern "efiapi" fn(
         MemoryMapSize: &mut usize,
-        MemoryMap: *mut EfiMemoryDescriptor,
+        MemoryMap: *mut u8,
         MapKey: &mut usize,
         DescriptorSize: &mut usize,
         DescriptoraVersion: &mut u32,
@@ -205,9 +205,9 @@ impl EfiBootServices {
     /// * `memory_map_buffer` EfiMemoryDescriptor型の書き込まれる先のbuffer
     pub fn get_memory_map(
         &self,
-        memory_map_buffer: &mut [EfiMemoryDescriptor]
+        memory_map_buffer: &mut [u8],
     ) -> Result<(usize, usize, usize, u32), EfiStatus> {
-        let mut memory_map_size = core::mem::size_of::<EfiMemoryDescriptor>() * memory_map_buffer.len();
+        let mut memory_map_size = core::mem::size_of::<u8>() * memory_map_buffer.len();
         // let buffer_ptr = memory_map_buffer.as_mut_ptr();
         let mut map_key = 0;
         let mut descriptor_size = 0;
@@ -221,7 +221,12 @@ impl EfiBootServices {
         );
 
         if _res == EfiStatus::Success {
-            Ok((memory_map_size, map_key, descriptor_size, descriptor_version))
+            Ok((
+                memory_map_size,
+                map_key,
+                descriptor_size,
+                descriptor_version,
+            ))
         } else {
             Err(_res)
         }

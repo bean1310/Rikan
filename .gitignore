@@ -3,3 +3,4 @@ target
 logs/*
 *.S
 workspace.code-workspace
+mnt
