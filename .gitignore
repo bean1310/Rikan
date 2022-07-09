@@ -1,6 +1,6 @@
 disk.img
-target
-logs/*
+*/target
+bootloader/logs/*
 *.S
 workspace.code-workspace
 mnt
