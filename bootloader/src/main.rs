@@ -88,8 +88,6 @@ fn save_memory_map(
         offset += descriptor_size;
     }
 
-    file.close().unwrap();
-
     EfiStatus::Success
 }
 
@@ -139,6 +137,25 @@ fn open_root_dir(
     }
 }
 
+fn run_kernel(boot_service: &EfiBootServices, efi_file_proto: &EfiFileProtocol) {
+    let opened_handle = efi_file_proto
+        .open(
+            "\\kernel",
+            EfiFileOpenMode::Read,
+            EfiFileAttribute::None,
+        )
+        .unwrap();
+
+    let kernel_file_info = opened_handle.get_info("\\kernel").unwrap();
+    let kernel_file_size = kernel_file_info.size;
+
+    println!("File size is {:}", kernel_file_size);
+
+    // ここから
+
+    opened_handle.close().unwrap();
+}
+
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTable) -> EfiStatus {
@@ -169,6 +186,10 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         .unwrap();
 
     save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size);
+
+    opened_handle.close().unwrap();
+
+   run_kernel(system_table.boot_services(), efi_file_proto);
 
     loop {}
 
