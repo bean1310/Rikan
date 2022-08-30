@@ -2,5 +2,8 @@ disk.img
 */target
 bootloader/logs/*
 *.S
+*.s
 workspace.code-workspace
 mnt
+.vscode
+*.pdf

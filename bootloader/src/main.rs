@@ -10,6 +10,7 @@ use core::ffi::c_void;
 use core::panic::PanicInfo;
 use core::ptr::{self, null, null_mut};
 use uefi::*;
+use core::arch::asm;
 
 extern crate alloc;
 mod uefi_alloc;
@@ -43,6 +44,8 @@ fn get_memory_map_unicode(memory_type_number: u32) -> &'static str {
         _ => "Unknown Memory Type",
     }
 }
+
+const KERNEL_BASE_ADDRESS: u64 = 0x0010_0000;
 
 fn save_memory_map(
     map: &[u8],
@@ -95,8 +98,6 @@ fn open_root_dir(
     image_handle: EfiHandle,
     bs: &EfiBootServices,
 ) -> Result<&EfiFileProtocol, EfiStatus> {
-    // let mut loaded_image: *mut EfiLoadedImageProtocol = null_mut();
-    // let mut fs: *mut EfiSimpleFileSystemProtocol = null_mut();
 
     unsafe {
         let _loaded_image = bs
@@ -115,8 +116,6 @@ fn open_root_dir(
             .as_ref()
             .unwrap();
 
-        // println!("{:?}", loaded_image);
-
         let _fs = bs
             .open_protocol(
                 loaded_image.device_handle,
@@ -127,8 +126,6 @@ fn open_root_dir(
             )
             .unwrap();
 
-        println!("2nd done");
-
         let fs = ((_fs as *const _) as *const EfiSimpleFileSystemProtocol)
             .as_ref()
             .unwrap();
@@ -137,8 +134,8 @@ fn open_root_dir(
     }
 }
 
-fn run_kernel(boot_service: &EfiBootServices, efi_file_proto: &EfiFileProtocol) {
-    let opened_handle = efi_file_proto
+fn run_kernel(boot_service: &EfiBootServices, efi_file_proto: &EfiFileProtocol, image_handle: EfiHandle, map_key: usize) -> !{
+    let kernel_file = efi_file_proto
         .open(
             "\\kernel",
             EfiFileOpenMode::Read,
@@ -146,14 +143,39 @@ fn run_kernel(boot_service: &EfiBootServices, efi_file_proto: &EfiFileProtocol) 
         )
         .unwrap();
 
-    let kernel_file_info = opened_handle.get_info("\\kernel").unwrap();
-    let kernel_file_size = kernel_file_info.size;
+    let kernel_file_info = kernel_file.get_info("\\kernel").unwrap();
+    let kernel_file_size = kernel_file_info.file_size.try_into().unwrap();
 
-    println!("File size is {:}", kernel_file_size);
+    let ma = boot_service.allocate_pages(EfiAllocateType::AllocateAddress, EfiMemoryType::EfiLoaderData, kernel_file_size as usize, KERNEL_BASE_ADDRESS).unwrap();
 
-    // ここから
+    kernel_file.read(kernel_file_size).unwrap();
 
-    opened_handle.close().unwrap();
+    match boot_service.exit_boot_service(image_handle, map_key) {
+        Ok(res) => goto_kernel(),
+        Err(res) => {
+            let mut memory_map: [u8; 4096] = [0; 4096];
+            let (map_size, map_key, descriptor_size, _) = boot_service.get_memory_map(&mut memory_map).unwrap();
+            // println!("Retry");
+            match boot_service.exit_boot_service(image_handle, map_key) {
+                Ok(res) => goto_kernel(),
+                Err(res) => {
+                    panic!()
+                }
+            }
+        }
+    };
+}
+
+fn goto_kernel() -> ! {
+    unsafe {
+        let address = 0x10_0120usize;
+        let kernel_main_ptr = address as *const ();
+        let kernel_main = core::mem::transmute::<*const (), fn()>(kernel_main_ptr);
+        kernel_main();
+        loop {
+            asm!("hlt");
+        }       
+    }
 }
 
 #[no_mangle]
@@ -162,15 +184,16 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
     uefi_alloc::init(system_table.boot_services(), system_table.con_out());
     console::init(system_table.con_out());
     println!("---- efi_main -----");
-    println!("{} + {} = {}", 10, 20, 10 + 20);
 
     // let mut memory_map: [EfiMemoryDescriptor; 60] = [Default::default(); 60];
     let mut memory_map: [u8; 4096] = [0; 4096];
 
-    let (map_size, _, descriptor_size, _) = system_table
+    let (map_size, map_key, descriptor_size, _) = system_table
         .boot_services()
         .get_memory_map(&mut memory_map)
         .unwrap();
+    
+    println!("image_handle is {:?}", image_handle);
 
     println!("get_memory_map() is done !");
     let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
@@ -189,7 +212,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
 
     opened_handle.close().unwrap();
 
-   run_kernel(system_table.boot_services(), efi_file_proto);
+    run_kernel(system_table.boot_services(), efi_file_proto, image_handle, map_key);
 
     loop {}
 
@@ -199,5 +222,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
     println!("{}", _panic);
-    loop {}
+    loop {
+        unsafe {asm!("hlt");}
+    }
 }
