@@ -168,8 +168,8 @@ fn run_kernel(boot_service: &EfiBootServices, efi_file_proto: &EfiFileProtocol, 
 
 fn goto_kernel() -> ! {
     unsafe {
-        let address = 0x10_0120usize;
-        let kernel_main_ptr = address as *const ();
+        let kernel_entry_point_addr = *((KERNEL_BASE_ADDRESS + 24) as *const u64);
+        let kernel_main_ptr = kernel_entry_point_addr as *const ();
         let kernel_main = core::mem::transmute::<*const (), fn()>(kernel_main_ptr);
         kernel_main();
         loop {
