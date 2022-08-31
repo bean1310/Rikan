@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec::{self, Vec};
-use core::ops::Index;
+use alloc::vec::Vec;
 use core::panic;
 use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
@@ -259,11 +258,6 @@ impl EfiBootServices {
         let mut _interface: *mut c_void = null_mut();
         let interface_ptr = &mut _interface;
 
-        // println!("{:?}", handle);
-        // println!("{:?}", protocol);
-        // println!("{:?}", agent_handle);
-        // println!("{:?}", controller_handle);
-        // println!("{:?}", attributes);
         let _res = (self.open_protocol)(
             handle,
             protocol,
@@ -530,13 +524,8 @@ impl EfiFileProtocol {
         }
     }
 
-    // ead: extern "efiapi" fn(
-    //     this: &EfiFileProtocol,
-    //     bufferSize: &usize,
-    //     buffer: &c_void,
-    // ) -> EfiStatus,
-    pub fn read(&self, buffer_size: usize) -> Result<EfiStatus, EfiStatus> {
-        let _kernel_load_address = KERNEL_BASE_ADDRESS as *mut u64;
+    pub fn read(&self, buffer_size: usize, load_address: u64) -> Result<EfiStatus, EfiStatus> {
+        let _kernel_load_address = load_address as *mut u64;
         let res = (self.read)(self, &buffer_size, _kernel_load_address as *mut _);
 
         if res == EfiStatus::Success {
