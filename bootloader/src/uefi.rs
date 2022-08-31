@@ -1,11 +1,11 @@
+use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec::{self, Vec};
-use core::ops::Index;
+use alloc::vec::Vec;
 use core::panic;
 use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
 
-use crate::print;
+use crate::{print, KERNEL_BASE_ADDRESS};
 use crate::println;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -132,12 +132,26 @@ impl EfiSimpleTextOutputProtocol {
 
 pub struct EfiSimpleTextInputProtocol {}
 pub struct EfiRuntimeService {}
+
+#[repr(C)]
+pub enum EfiAllocateType{
+    AllocateAnyPages,
+    AllocateMaxAddress,
+    AllocateAddress,
+    MaxAllocateType
+}
+
 #[repr(C)]
 pub struct EfiBootServices {
     hdr: EfiTableHeader,
     raise_tpl: NotImplemented,
     restore_tpl: NotImplemented,
-    allocate_pages: NotImplemented,
+    allocate_pages: extern "efiapi" fn(
+        allocate_type: EfiAllocateType,
+        memory_type: EfiMemoryType,
+        pages: usize,
+        memory: &EfiPhysicalAddress
+    ) -> EfiStatus,
     free_pages: NotImplemented,
     get_memory_map: extern "efiapi" fn(
         MemoryMapSize: &mut usize,
@@ -168,7 +182,8 @@ pub struct EfiBootServices {
     start_image: NotImplemented,
     exit: NotImplemented,
     unload_image: NotImplemented,
-    exit_boot_service: NotImplemented,
+    exit_boot_service: 
+        extern "efiapi" fn(image_handle: EfiHandle, map_key: usize) -> EfiStatus,
     get_next_monotonic_count: NotImplemented,
     stall: NotImplemented,
     set_watchdog_timer: NotImplemented,
@@ -243,11 +258,6 @@ impl EfiBootServices {
         let mut _interface: *mut c_void = null_mut();
         let interface_ptr = &mut _interface;
 
-        // println!("{:?}", handle);
-        // println!("{:?}", protocol);
-        // println!("{:?}", agent_handle);
-        // println!("{:?}", controller_handle);
-        // println!("{:?}", attributes);
         let _res = (self.open_protocol)(
             handle,
             protocol,
@@ -293,6 +303,42 @@ impl EfiBootServices {
             Ok(())
         } else {
             Err(())
+        }
+    }
+
+    pub fn allocate_pages(
+        &self, 
+        allocate_type: EfiAllocateType,
+        memory_type: EfiMemoryType,
+        mut pages: usize,
+        mut memory: EfiPhysicalAddress
+    ) -> Result<EfiPhysicalAddress, EfiStatus> {
+
+        if (pages % 0x1000) != 0 {
+            // 4KiB alignment
+            pages = (pages + 0xfff) / 0x1000
+        }
+
+        let _res = (self.allocate_pages)(allocate_type, memory_type, pages, &mut memory);
+
+        if _res == EfiStatus::Success {
+            Ok(memory)
+        } else {
+            Err(_res)
+        }
+    }
+
+    pub fn exit_boot_service(
+        &self, 
+        image_handle: EfiHandle,
+        map_key: usize
+    ) -> Result<EfiStatus, EfiStatus> {
+        let _res = (self.exit_boot_service)(image_handle, map_key);
+
+        if _res == EfiStatus::Success {
+            Ok(_res)
+        } else {
+            Err(_res)
         }
     }
 }
@@ -346,7 +392,7 @@ pub struct EfiFileProtocol {
     read: extern "efiapi" fn(
         this: &EfiFileProtocol,
         bufferSize: &usize,
-        buffer: &c_void,
+        buffer: *mut c_void,
     ) -> EfiStatus,
     write: extern "efiapi" fn(
         this: &EfiFileProtocol,
@@ -359,7 +405,7 @@ pub struct EfiFileProtocol {
         this: &EfiFileProtocol,
         infomationType: &EfiGuid,
         bufferSize: &usize,
-        buffer: &c_void,
+        buffer: *mut c_void,
     ) -> EfiStatus,
     set_info: extern "efiapi" fn(
         this: &EfiFileProtocol,
@@ -392,7 +438,64 @@ pub enum EfiFileOpenMode {
     CreateReadWrite = 0x8000_0000_0000_0000 | 0x1 | 0x2,
 }
 
+pub const EFI_FILE_INFO_ID: EfiGuid = EfiGuid {
+    data_1: 0x09576e92,
+    data_2: 0x6d3f,
+    data_3: 0x11d2,
+    data_4: [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
+};
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiTime {
+    year: u64,
+    month: u8,
+    day: u8, 
+    hour: u8,
+    minute: u8,
+    second: u8,
+    _pad1: u8,
+    nanosecond: u32,
+    time_zone: i16,
+    daylight: u8,
+    _pad2: u8
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct EfiFileInfo {
+    pub size: u64,
+    pub file_size: u64,
+    pub physical_size: u64,
+    pub create_time: EfiTime,
+    pub last_access_time: EfiTime, 
+    pub modification_time: EfiTime,
+    pub attribute: u64
+}
+
 impl EfiFileProtocol {
+    pub fn close(&self) -> Result<EfiStatus, EfiStatus> {
+        let _res = (self.close)(self);
+        if _res == EfiStatus::Success {
+            Ok(_res)
+        } else {
+            Err(_res)
+        }
+    }
+
+    pub fn get_info(&self, file_name: &str) -> Result<EfiFileInfo, EfiStatus> {
+        let file_name_len = file_name.len();
+        let mut buffer: Box<[u8]> = Box::new([0; 1024]);
+        let buffer_ptr = buffer.as_mut_ptr() as *mut c_void;
+        let _res = (self.get_info)(self, &EFI_FILE_INFO_ID, &(buffer.len()), buffer_ptr);
+        if _res == EfiStatus::Success {
+            let file_info = unsafe {(buffer.as_ptr() as *const EfiFileInfo).as_ref().unwrap()};
+            Ok(*file_info)
+        } else {
+            Err(_res)
+        }
+    }
+
     pub fn open(
         &self,
         file_name: &str,
@@ -421,20 +524,22 @@ impl EfiFileProtocol {
         }
     }
 
+    pub fn read(&self, buffer_size: usize, load_address: u64) -> Result<EfiStatus, EfiStatus> {
+        let _kernel_load_address = load_address as *mut u64;
+        let res = (self.read)(self, &buffer_size, _kernel_load_address as *mut _);
+
+        if res == EfiStatus::Success {
+            Ok(res)
+        } else {
+            Err(res)
+        }
+    }
+
     pub fn write(&self, buffer_size: usize, buffer: &str) -> Result<usize, EfiStatus> {
         let mut written_buffer_size = buffer_size;
         let _res = (self.write)(self, &mut written_buffer_size, buffer.as_ptr() as *const _);
         if _res == EfiStatus::Success {
             Ok(written_buffer_size)
-        } else {
-            Err(_res)
-        }
-    }
-
-    pub fn close(&self) -> Result<EfiStatus, EfiStatus> {
-        let _res = (self.close)(self);
-        if _res == EfiStatus::Success {
-            Ok(_res)
         } else {
             Err(_res)
         }
