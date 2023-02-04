@@ -8,8 +8,9 @@
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use core::ptr::{self, null};
+use core::ptr::{self, null, null_mut};
 use uefi::*;
+use utf16_literal::utf16;
 
 extern crate alloc;
 mod uefi_alloc;
@@ -179,12 +180,23 @@ unsafe fn goto_kernel() -> ! {
     }
 }
 
+// unsafe fn open_gop(image_handle: EfiHandle, boot_service: &EfiBootServices) -> &EfiGraphicsOutputProtocol {
+unsafe fn open_gop(image_handle: EfiHandle, boot_service: &EfiBootServices) -> Result<&EfiGraphicsOutputProtocol, EfiStatus>{
+    let (num_gop_handles, gop_handles) = boot_service.locate_handle_buffer(EfiLocateSearchType::ByProtocol, &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, null()).unwrap();
+    println!("handles: {}", num_gop_handles);
+    let _res = (boot_service.open_protocol(gop_handles[0], &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, image_handle, null(), EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL).unwrap() as *const EfiGraphicsOutputProtocol).as_ref().unwrap();
+    boot_service.free_pool(gop_handles[0]).unwrap();
+    return Ok(_res);
+}
+
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTable) -> EfiStatus {
     uefi_alloc::init(system_table.boot_services(), system_table.con_out());
     console::init(system_table.con_out());
     println!("---- bootloader ----");
+
+    let _ = utf16!("tetetete").as_ptr();
 
     let mut memory_map: [u8; 4096] = [0; 4096];
 
@@ -206,7 +218,22 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
 
     save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size);
 
-    opened_handle.close().unwrap();
+    opened_handle.close().unwrap();// こいつ、save_memory_map関数内部でやったら良いのでは。
+
+    unsafe {
+        let gop = open_gop(image_handle, system_table.boot_services()).unwrap();
+        // Pixel Format: {}, {} pixels/line
+        println!("Resolution: {}x{}",
+            gop.mode.info.horizontal_resolution,
+            gop.mode.info.vertical_resolution,
+        );
+
+        let frame_buffer = gop.mode.frame_buffer_base as *mut u8;
+        for i in 0..gop.mode.frame_buffer_size {
+            *(frame_buffer.offset(i.try_into().unwrap())) = 255;
+        }
+    }
+    
 
     println!("---- run kernel ----");
 

@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::panic;
+use core::{panic, num, slice};
 use core::ptr::{null, null_mut};
 use core::{ffi::c_void, ptr};
 
@@ -142,6 +142,13 @@ pub enum EfiAllocateType{
 }
 
 #[repr(C)]
+pub enum EfiLocateSearchType {
+    AllHandles,
+    ByRegisterNotify,
+    ByProtocol
+}
+
+#[repr(C)]
 pub struct EfiBootServices {
     hdr: EfiTableHeader,
     raise_tpl: NotImplemented,
@@ -162,7 +169,7 @@ pub struct EfiBootServices {
     ) -> EfiStatus,
     allocate_pool:
         extern "efiapi" fn(pooltype: EfiMemoryType, size: usize, buffer: &mut *mut u8) -> EfiStatus,
-    free_pool: extern "efiapi" fn(address: *mut u8) -> EfiStatus,
+    free_pool: extern "efiapi" fn(address: *const c_void) -> EfiStatus,
     create_event: NotImplemented,
     set_timer: NotImplemented,
     wait_for_event: NotImplemented,
@@ -205,7 +212,13 @@ pub struct EfiBootServices {
     ) -> EfiStatus,
     open_protocol_infomation: NotImplemented,
     protocols_per_handle: NotImplemented,
-    locate_handle_buffer: NotImplemented,
+    locate_handle_buffer: extern "efiapi" fn(
+        search_type: EfiLocateSearchType,
+        protocol: &EfiGuid,
+        search_key: *const c_void,
+        no_handles: *mut usize,
+        buffer: &mut *mut EfiHandle
+    ) -> EfiStatus,
     locate_protocol: NotImplemented,
     install_multiple_protocol_interface: NotImplemented,
     uninstall_multiple_protocol_interface: NotImplemented,
@@ -254,9 +267,16 @@ impl EfiBootServices {
         agent_handle: EfiHandle,
         controller_handle: EfiHandle,
         attributes: u32,
-    ) -> Result<&c_void, EfiStatus> {
-        let mut _interface: *mut c_void = null_mut();
-        let interface_ptr = &mut _interface;
+    ) -> Result<*const c_void, EfiStatus> {
+        let mut interface: *mut c_void = null_mut();
+        let interface_ptr = &mut interface;
+
+        println!("handle: {:p}", handle);
+        println!("protocol: {:p}", protocol);
+        println!("interface_ptr {:p}", interface_ptr);
+        println!("contoroller_handle {:p}", controller_handle);
+        println!("agent_handle {:p}", agent_handle);
+        println!("{:}", attributes);
 
         let _res = (self.open_protocol)(
             handle,
@@ -268,10 +288,10 @@ impl EfiBootServices {
         );
 
         if _res == EfiStatus::Success {
-            if interface_ptr.is_null() {
-                println!("RETURN NULL");
+            if interface.is_null() {
+                panic!("RETURN NULL");
             }
-            Ok(interface_ptr.as_ref().unwrap())
+            unsafe {Ok(interface as *const _)}
         } else {
             Err(_res)
         }
@@ -298,7 +318,7 @@ impl EfiBootServices {
         }
     }
 
-    pub fn free_pool(&self, buffer: *mut u8) -> Result<(), ()> {
+    pub fn free_pool(&self, buffer: *const c_void) -> Result<(), ()> {
         if (self.free_pool)(buffer) == EfiStatus::Success {
             Ok(())
         } else {
@@ -341,6 +361,150 @@ impl EfiBootServices {
             Err(_res)
         }
     }
+
+    // locate_handle_buffer: extern "efiapi" fn(
+    //     search_type: EfiLocateSearchType,
+    //     protocol: *const EfiGuid,
+    //     search_key: *const c_void,
+    //     no_handles: *mut usize,
+    //     buffer: &mut *mut EfiHandle
+    // ),
+    pub fn locate_handle_buffer(
+        &self,
+        search_type: EfiLocateSearchType,
+        protocol: &EfiGuid,
+        search_key: *const c_void,
+    ) -> Result<(usize, Vec<EfiHandle>), EfiStatus> {
+        let mut num_handles = 0;
+        let mut gop_handle: EfiHandle = ptr::null_mut();
+        let mut gop_handles_ptr: *mut EfiHandle = &mut gop_handle;
+        let gop_handles_ptr_ptr = &mut gop_handles_ptr;
+        let _res = (self.locate_handle_buffer)(search_type, protocol, search_key, &mut num_handles as *mut usize, gop_handles_ptr_ptr);
+        println!("gop_ptr: {:p}", *gop_handles_ptr_ptr);
+        if _res == EfiStatus::Success {
+            unsafe {
+                let hoge = slice::from_raw_parts(gop_handles_ptr, num_handles);
+                let mut result: Vec<EfiHandle> = Vec::new();
+                for elem in hoge {
+                    result.push(*elem);
+                }
+            Ok((num_handles, result))
+            }
+        } else {
+            Err(_res)
+        }
+    }
+}
+
+pub const EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID: EfiGuid = EfiGuid {
+    data_1: 0x9042a9de,
+    data_2: 0x23dc,
+    data_3: 0x4a38,
+    data_4: [0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a],
+};
+
+#[repr(C)]
+pub struct EfiGraphicsOutputProtocolMode<'a> {
+    pub max_mode: u32,
+    pub mode: u32,
+    pub info: &'a EfiGraphicsOutputModeInformation,
+    pub size_of_info: usize,
+    pub frame_buffer_base: EfiPhysicalAddress,
+    pub frame_buffer_size: usize
+}
+
+#[repr(C)]
+pub struct EfiGraphicsOutputModeInformation {
+    version: u32,
+    pub horizontal_resolution: u32,
+    pub vertical_resolution: u32,
+    pixel_format: EfiGraphicsPixelFormat,
+    pixel_information: EfiPixelBitmask,
+    pixels_per_scan_line: u32
+}
+
+#[repr(C)]
+pub struct EfiPixelBitmask {
+    red_mask: u32,
+    green_mask: u32,
+    blue_mask: u32,
+    _reserved_mask: u32
+}
+
+
+// pub struct EfiSimpleFileSystemProtocol {
+//     revision: u64,
+//     open_volume: extern "efiapi" fn(
+//         this: &EfiSimpleFileSystemProtocol,
+//         root: &mut *mut EfiFileProtocol,
+//     ) -> EfiStatus,
+// }
+
+// impl EfiSimpleFileSystemProtocol {
+//     pub unsafe fn open_volume(&self) -> Result<&EfiFileProtocol, EfiStatus> {
+//         let mut efi_file_proto = ptr::null_mut();
+//         let mut efi_file_proto_ptr = &mut efi_file_proto;
+//         let _res = (self.open_volume)(self, efi_file_proto_ptr);
+//         if _res == EfiStatus::Success {
+//             Ok(efi_file_proto_ptr.as_ref().unwrap())
+//         } else {
+//             Err(_res)
+//         }
+//     }
+// }
+
+
+#[repr(C)]
+pub struct EfiGraphicsOutputBltPixel {
+    blue: u8,
+    green: u8,
+    red: u8,
+    _reserved: u8
+}
+
+#[repr(C)]
+pub enum EfiGraphicsOutputBltOperation {
+    EfiBltVideoFill,
+    EfiBltVideoToVltBuffer,
+    EfiBltBufferToVideo,
+    EfiBltVideoToVideo,
+    EfiGraphicsOutputBltOperationMax
+}
+
+#[repr(C)]
+pub struct EfiGraphicsOutputProtocol<'a> {
+    pub query_mode: extern "efiapi" fn(
+        this: &Self,
+        mode_number: u32,
+        size_of_info: &usize,
+        info: &&EfiGraphicsOutputModeInformation
+    ) -> EfiStatus,
+    pub set_mode: extern "efiapi" fn(
+        this: &Self,
+        mode_number: u32
+    ) -> EfiStatus,
+    pub blt: extern "efiapi" fn(
+        this: &Self,
+        blt_buffer: EfiGraphicsOutputBltPixel,
+        blt_operation: EfiGraphicsOutputBltOperation,
+        source_x: usize,
+        source_y: usize,
+        destination_x: usize,
+        destination_y: usize,
+        width: usize,
+        height: usize,
+        delta: usize
+    ) -> EfiStatus,
+    pub mode: &'a EfiGraphicsOutputProtocolMode<'a>,
+}
+
+#[repr(C)]
+pub enum EfiGraphicsPixelFormat {
+    PixelRedGreenBlueReserved8BitPerColor,
+    PixelBlueGreenRedReserved8BitPerColor,
+    PixelBitMask,
+    PixelBitOnly,
+    PixelFormatMAx,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -620,6 +784,9 @@ impl EfiSystemTable {
         unsafe { &*self.boot_services }
     }
 }
+
+
+
 
 // std環境と違ってなぜか呼び出し側から見るポインタの先の値が変わってしまう
 // fn str_to_uefi_utf16(text: &str) -> Vec<u16> {

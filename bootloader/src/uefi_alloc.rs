@@ -1,5 +1,6 @@
 use crate::uefi::{EfiBootServices, EfiMemoryType, EfiSimpleTextOutputProtocol};
 use core::alloc::{GlobalAlloc, Layout};
+use core::ffi::c_void;
 use core::panic;
 use core::ptr::{NonNull};
 
@@ -48,7 +49,7 @@ unsafe impl GlobalAlloc for Allocator {
                 .output_string(utf16!("dealloc\0").as_ptr());
             panic!()
         } else {
-            let _ = EFI_BOOT_SERVICES.unwrap().as_ref().free_pool(ptr);
+            let _ = EFI_BOOT_SERVICES.unwrap().as_ref().free_pool(ptr as *const c_void);
         }
     }
 }
