@@ -25,5 +25,7 @@ jobs:
         target: x86_64-unknown-linux-gnu
         override: true
         components: rust-src
+    - name: Create pseudo .env
+      run: touch .env
     - name: Build
       run: make
