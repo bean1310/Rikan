@@ -1,3 +1,5 @@
+include .env
+
 all: bootloader kernel
 
 .PHONY: kernel
@@ -9,4 +11,4 @@ bootloader:
 	${MAKE} -C bootloader build
 
 run: all
-	./run_qemu.sh bootloader/target/x86_64-unknown-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel
+	${MIKANOS_BUILD_PATH}/devenv/run_qemu.sh bootloader/target/x86_64-unknown-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel
