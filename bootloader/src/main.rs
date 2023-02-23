@@ -156,7 +156,7 @@ fn run_kernel(
     match boot_service.exit_boot_service(image_handle, map_key) {
         Ok(_) => unsafe { goto_kernel() },
         Err(_) => {
-            let mut memory_map: [u8; 4096] = [0; 4096];
+            let mut memory_map: [u8; 8192] = [0; 8192];
             // re-generate map key
             let (map_size, map_key, descriptor_size, _) =
                 boot_service.get_memory_map(&mut memory_map).unwrap();
@@ -198,7 +198,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
 
     let _ = utf16!("tetetete").as_ptr();
 
-    let mut memory_map: [u8; 4096] = [0; 4096];
+    let mut memory_map: [u8; 8192] = [0; 8192];
 
     let (map_size, map_key, descriptor_size, _) = system_table
         .boot_services()
