@@ -228,9 +228,15 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
             gop.mode.info.vertical_resolution,
         );
 
-        let frame_buffer = gop.mode.frame_buffer_base as *mut u8;
+        println!("Frame Buffer: 0x{:x} - 0x{:x}, Size: {} bytes",
+            gop.mode.frame_buffer_base,
+            gop.mode.frame_buffer_base + gop.mode.frame_buffer_size as u64,
+            gop.mode.frame_buffer_size        
+        );
+
+        let frame_buffer = gop.mode.frame_buffer_base as *mut u64;
         for i in 0..gop.mode.frame_buffer_size {
-            *(frame_buffer.offset(i.try_into().unwrap())) = 255;
+            *(frame_buffer.offset(i.try_into().unwrap())) = (i / 255).try_into().expect(format!("i is {}", i).as_str());
         }
     }
     
