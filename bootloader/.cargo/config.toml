@@ -1,5 +1,6 @@
 [build]
-target = "x86_64-unknown-uefi"
+target = "x86_64_mikan-uefi.json"
+rustflags = ["-C", "link-args=/debug:dwarf"]
 
 [unstable]
 build-std = ["core", "compiler_builtins", "alloc"]

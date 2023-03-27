@@ -10,6 +10,8 @@ utf16_literal = "0.2.1"
 
 [profile.dev]
 panic = "abort"
+debug = true
 
 [profile.release]
 panic = "abort"
+debug = true
