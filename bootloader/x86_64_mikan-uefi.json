@@ -11,7 +11,7 @@
   "features": "-mmx,-sse,+soft-float",
   "is-like-msvc": false,
   "is-like-windows": true,
-  "linker": "rust-lld",
+  "linker": "ld.lld",
   "linker-flavor": "lld-link",
   "linker-is-gnu": false,
   "lld-flavor": "link",
@@ -23,7 +23,8 @@
     "lld-link": [
       "/NOLOGO",
       "/entry:efi_main",
-      "/subsystem:efi_application"
+      "/subsystem:efi_application",
+      "/base:0x3e138000"
     ],
     "msvc": [
       "/NOLOGO",
