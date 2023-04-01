@@ -132,7 +132,6 @@ fn run_kernel(
     efi_file_proto: &EfiFileProtocol,
     image_handle: EfiHandle,
     map_key: usize,
-    buffer_info: (*mut u64, u64)
 ) -> ! {
     let kernel_file = efi_file_proto
         .open("\\kernel", EfiFileOpenMode::Read, EfiFileAttribute::None)
@@ -156,7 +155,7 @@ fn run_kernel(
         .read(kernel_file_size, KERNEL_BASE_ADDRESS)
         .unwrap();
 
-    let (buffer_base, buffer_size) = (buffer_info.0, buffer_info.1);
+    let (buffer_base, buffer_size) = (ptr::null_mut(),2);
     
     let mut memory_map: [u8; 8192] = [0; 8192];
     let (map_size, map_key, descriptor_size, _) =
@@ -268,7 +267,6 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         efi_file_proto,
         image_handle,
         map_key,
-        get_buffer_info(image_handle, system_table.boot_services()).unwrap()
     );
 
     loop {}
