@@ -7,3 +7,4 @@ bootloader/logs/*
 mnt
 .vscode
 *.pdf
+*.log
