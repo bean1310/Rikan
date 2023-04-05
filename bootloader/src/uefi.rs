@@ -374,21 +374,20 @@ impl EfiBootServices {
         search_type: EfiLocateSearchType,
         protocol: &EfiGuid,
         search_key: *const c_void,
-    ) -> Result<(usize, Vec<EfiHandle>), EfiStatus> {
+    ) -> Result<(usize, Vec<EfiHandle>, *const c_void), EfiStatus> {
         let mut num_handles = 0;
         let mut gop_handle: EfiHandle = ptr::null_mut();
-        let mut gop_handles_ptr: *mut EfiHandle = &mut gop_handle;
+        let mut gop_handles_ptr = (&mut gop_handle) as *mut EfiHandle;
         let gop_handles_ptr_ptr = &mut gop_handles_ptr;
         let _res = (self.locate_handle_buffer)(search_type, protocol, search_key, &mut num_handles as *mut usize, gop_handles_ptr_ptr);
-        println!("gop_ptr: {:p}", *gop_handles_ptr_ptr);
         if _res == EfiStatus::Success {
             unsafe {
                 let hoge = slice::from_raw_parts(gop_handles_ptr, num_handles);
                 let mut result: Vec<EfiHandle> = Vec::new();
-                for elem in hoge {
+                for elem in hoge.into_iter() {
                     result.push(*elem);
                 }
-            Ok((num_handles, result))
+            Ok((num_handles, result, gop_handles_ptr as *const c_void))
             }
         } else {
             Err(_res)
