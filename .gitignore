@@ -3,7 +3,8 @@ disk.img
 bootloader/logs/*
 *.S
 *.s
-workspace.code-workspace
+*.code-workspace
 mnt
 .vscode
 *.pdf
+*.log
