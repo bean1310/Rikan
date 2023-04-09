@@ -163,7 +163,7 @@ fn run_kernel(
         boot_service.get_memory_map(&mut memory_map).unwrap();
 
     match boot_service.exit_boot_service(image_handle, map_key) {
-        Ok(_) => unsafe { goto_kernel(buffer_base, buffer_size) },
+        Ok(_) => goto_kernel(buffer_base, buffer_size),
         Err(res) => {
             println!("Failed to EXIT_BOOT_SERVICE because {:?}", res);
             let mut memory_map: [u8; 8192] = [0; 8192];
@@ -171,7 +171,7 @@ fn run_kernel(
             let (map_size, new_map_key, descriptor_size, _) =
                 boot_service.get_memory_map(&mut memory_map).unwrap();
             match boot_service.exit_boot_service(image_handle, new_map_key) {
-                Ok(_) => unsafe { goto_kernel(buffer_base, buffer_size) },
+                Ok(_) => goto_kernel(buffer_base, buffer_size),
                 Err(status) => {
                     panic!("{:?}", status)
                 }
@@ -180,13 +180,21 @@ fn run_kernel(
     };
 }
 
-unsafe fn goto_kernel(buffer_base: *mut u64, buffer_size: u64) -> ! {
-    let kernel_main_ptr = (KERNEL_BASE_ADDRESS + 0x0120) as *const ();
-    let kernel_main = core::mem::transmute::<*const (), fn()>(kernel_main_ptr);
-    kernel_main();
-    loop {
-        asm!("hlt");
-    }
+type KernelMainT = unsafe extern "sysv64" fn(*mut u64, u64) -> !;
+
+fn goto_kernel(buffer_base: *mut u64, buffer_size: u64) -> ! {
+    unsafe {
+        let entry_point = ((KERNEL_BASE_ADDRESS + 24) as *const u64).as_ref().unwrap();
+        let kernel_main_ptr = *entry_point as *const ();
+        let kernel_main: KernelMainT = core::mem::transmute::<
+            *const (),
+            unsafe extern "sysv64" fn(*mut u64, u64) -> !,
+        >(kernel_main_ptr);
+        kernel_main(buffer_base, buffer_size);
+        loop {
+            asm!("hlt");
+        }
+    };
 }
 
 // unsafe fn open_gop(image_handle: EfiHandle, boot_service: &EfiBootServices) -> &EfiGraphicsOutputProtocol {
