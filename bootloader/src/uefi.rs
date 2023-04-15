@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::{panic, num, slice};
-use core::ptr::{null, null_mut};
+use core::{panic, slice};
+use core::ptr::null_mut;
 use core::{ffi::c_void, ptr};
 
-use crate::{print, KERNEL_BASE_ADDRESS};
+use crate::{print};
 use crate::println;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -73,6 +73,7 @@ pub const EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID: EfiGuid = EfiGuid {
 pub const EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL: u32 = 0x00000001;
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 #[repr(u64)]
 pub enum EfiFileAttribute {
     // This value is NOT defined on UEFI Spec.
@@ -260,7 +261,7 @@ impl EfiBootServices {
         }
     }
 
-    pub unsafe fn open_protocol(
+    pub fn open_protocol(
         &self,
         handle: EfiHandle,
         protocol: &EfiGuid,
@@ -291,7 +292,7 @@ impl EfiBootServices {
             if interface.is_null() {
                 panic!("RETURN NULL");
             }
-            unsafe {Ok(interface as *const _)}
+            Ok(interface as *const _)
         } else {
             Err(_res)
         }
@@ -351,10 +352,10 @@ impl EfiBootServices {
     pub fn exit_boot_service(
         &self, 
         image_handle: EfiHandle,
-        map_key: usize
     ) -> Result<EfiStatus, EfiStatus> {
+        let mut memory_map: [u8; 8192] = [0; 8192];
+        let map_key = self.get_memory_map(&mut memory_map).unwrap().1;
         let _res = (self.exit_boot_service)(image_handle, map_key);
-
         if _res == EfiStatus::Success {
             Ok(_res)
         } else {
@@ -461,6 +462,7 @@ pub struct EfiGraphicsOutputBltPixel {
     _reserved: u8
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub enum EfiGraphicsOutputBltOperation {
     EfiBltVideoFill,
@@ -497,6 +499,7 @@ pub struct EfiGraphicsOutputProtocol<'a> {
     pub mode: &'a EfiGraphicsOutputProtocolMode<'a>,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub enum EfiGraphicsPixelFormat {
     PixelRedGreenBlueReserved8BitPerColor,
@@ -594,6 +597,7 @@ pub struct EfiFileProtocol {
 // uefi-rsでは、使い方を3つに絞ってやってた
 // ありっちゃあり。なので採用した。
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 #[repr(u64)]
 pub enum EfiFileOpenMode {
     Read = 0x1,
@@ -646,8 +650,7 @@ impl EfiFileProtocol {
         }
     }
 
-    pub fn get_info(&self, file_name: &str) -> Result<EfiFileInfo, EfiStatus> {
-        let file_name_len = file_name.len();
+    pub fn get_info(&self) -> Result<EfiFileInfo, EfiStatus> {
         let mut buffer: Box<[u8]> = Box::new([0; 1024]);
         let buffer_ptr = buffer.as_mut_ptr() as *mut c_void;
         let _res = (self.get_info)(self, &EFI_FILE_INFO_ID, &(buffer.len()), buffer_ptr);
@@ -702,6 +705,9 @@ impl EfiFileProtocol {
         let mut written_buffer_size = buffer_size;
         let _res = (self.write)(self, &mut written_buffer_size, buffer.as_ptr() as *const _);
         if _res == EfiStatus::Success {
+            if buffer_size != written_buffer_size {
+                panic!("Failed to write completely. len:{} done:{}", buffer_size, written_buffer_size);
+            }
             Ok(written_buffer_size)
         } else {
             Err(_res)
@@ -764,7 +770,7 @@ pub struct EfiSimpleFileSystemProtocol {
 impl EfiSimpleFileSystemProtocol {
     pub unsafe fn open_volume(&self) -> Result<&EfiFileProtocol, EfiStatus> {
         let mut efi_file_proto = ptr::null_mut();
-        let mut efi_file_proto_ptr = &mut efi_file_proto;
+        let efi_file_proto_ptr = &mut efi_file_proto;
         let _res = (self.open_volume)(self, efi_file_proto_ptr);
         if _res == EfiStatus::Success {
             Ok(efi_file_proto_ptr.as_ref().unwrap())

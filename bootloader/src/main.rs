@@ -3,14 +3,11 @@
 #![feature(abi_efiapi)]
 #![feature(alloc_error_handler)]
 
-// extern crate alloc;
-
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use core::ptr::{self, null, null_mut};
+use core::ptr::null;
 use uefi::*;
-use utf16_literal::utf16;
 
 extern crate alloc;
 mod uefi_alloc;
@@ -50,18 +47,12 @@ fn save_memory_map(
     file: &EfiFileProtocol,
     descriptor_size: usize,
     map_size: usize,
-) -> EfiStatus {
+) -> Result<EfiStatus, EfiStatus> {
     let header = "Index,\tType,\tType(name),\tPhysicalStart,\tNumberOfPages,\tAttribute\n";
     let len = header.len();
 
-    let written_size = file.write(len, header).unwrap();
-
-    if written_size != len {
-        panic!(
-            "Failed to write completely. len:{} done:{}",
-            len, written_size
-        );
-    }
+    file.write(len, header)
+        .expect("Failed to write memory map header.");
 
     let mut index = 0;
     let mut offset = 0;
@@ -81,15 +72,17 @@ fn save_memory_map(
             memory_descriptor.number_of_pages,
             memory_descriptor.attribute
         );
-        file.write(mem_region_info.len(), &mem_region_info);
+
+        file.write(mem_region_info.len(), &mem_region_info)?;
 
         index += 1;
         offset += descriptor_size;
     }
 
-    EfiStatus::Success
+    Ok(EfiStatus::Success)
 }
 
+/// Open root directory on file system
 fn open_root_dir(
     image_handle: EfiHandle,
     bs: &EfiBootServices,
@@ -127,136 +120,136 @@ fn open_root_dir(
     }
 }
 
-fn run_kernel(
+/// Load kernel binary from file system
+fn load_kernel(
+    base_address: u64,
     boot_service: &EfiBootServices,
-    efi_file_proto: &EfiFileProtocol,
     image_handle: EfiHandle,
-    map_key: usize,
-    buffer_info: (*mut u64, u64),
-) -> ! {
-    let kernel_file = efi_file_proto
-        .open("\\kernel", EfiFileOpenMode::Read, EfiFileAttribute::None)
-        .unwrap();
+) -> Result<(), EfiStatus> {
+    let file_protocol = open_root_dir(image_handle, boot_service).unwrap();
+    let kernel_file =
+        file_protocol.open("\\kernel", EfiFileOpenMode::Read, EfiFileAttribute::None)?;
 
-    let kernel_file_info = kernel_file.get_info("\\kernel").unwrap();
+    let kernel_file_info = kernel_file.get_info().unwrap();
     let kernel_file_size = kernel_file_info.file_size.try_into().unwrap();
 
-    let addr = boot_service
-        .allocate_pages(
-            EfiAllocateType::AllocateAddress,
-            EfiMemoryType::EfiLoaderData,
-            kernel_file_size as usize,
-            KERNEL_BASE_ADDRESS,
-        )
-        .unwrap();
+    let base_address = boot_service.allocate_pages(
+        EfiAllocateType::AllocateAddress,
+        EfiMemoryType::EfiLoaderData,
+        kernel_file_size as usize,
+        base_address,
+    )?;
 
-    println!("addr is {}", addr);
+    kernel_file.read(kernel_file_size, base_address)?;
 
-    kernel_file
-        .read(kernel_file_size, KERNEL_BASE_ADDRESS)
-        .unwrap();
+    println!("[DEBUG] kernel loaded at 0x{:x}", base_address);
 
-    let (buffer_base, buffer_size) = (buffer_info.0, buffer_info.1);
+    Ok(())
+}
 
-    let mut memory_map: [u8; 8192] = [0; 8192];
-    let (map_size, map_key, descriptor_size, _) =
-        boot_service.get_memory_map(&mut memory_map).unwrap();
+/// Prepare kernel and jump to kernel
+fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle) -> ! {
+    load_kernel(KERNEL_BASE_ADDRESS, boot_service, image_handle).expect("Failed to load kernel");
 
-    match boot_service.exit_boot_service(image_handle, map_key) {
-        Ok(_) => goto_kernel(buffer_base, buffer_size),
+    let monitor_frame_buffer = get_monitor_frame_buffer(image_handle, boot_service).unwrap();
+
+    match boot_service.exit_boot_service(image_handle) {
+        Ok(_) => goto_kernel(monitor_frame_buffer),
         Err(res) => {
-            println!("Failed to EXIT_BOOT_SERVICE because {:?}", res);
-            let mut memory_map: [u8; 8192] = [0; 8192];
-            // re-generate map key
-            let (map_size, new_map_key, descriptor_size, _) =
-                boot_service.get_memory_map(&mut memory_map).unwrap();
-            match boot_service.exit_boot_service(image_handle, new_map_key) {
-                Ok(_) => goto_kernel(buffer_base, buffer_size),
-                Err(status) => {
-                    panic!("{:?}", status)
-                }
-            }
+            panic!("Failed to exit boot service. {:?}", res)
         }
     };
 }
 
-type KernelMainT = unsafe extern "sysv64" fn(*mut u64, u64) -> !;
+struct MonitorFrameBuffer {
+    base_address: *mut u64,
+    size: u64,
+}
 
-fn goto_kernel(buffer_base: *mut u64, buffer_size: u64) -> ! {
+/// Jump to kernel
+#[allow(unreachable_code)]
+fn goto_kernel(frame_buffer: MonitorFrameBuffer) -> ! {
     unsafe {
+        // Get entrypoint address of kernel from elf header
         let entry_point = ((KERNEL_BASE_ADDRESS + 24) as *const u64).as_ref().unwrap();
         let kernel_main_ptr = *entry_point as *const ();
-        let kernel_main: KernelMainT = core::mem::transmute::<
+
+        // Define kernel_main function type
+        // Kernel binary is compiled with sysv64 calling convention
+        let kernel_main = core::mem::transmute::<
             *const (),
             unsafe extern "sysv64" fn(*mut u64, u64) -> !,
         >(kernel_main_ptr);
-        kernel_main(buffer_base, buffer_size);
+
+        kernel_main(frame_buffer.base_address, frame_buffer.size);
+
         loop {
             asm!("hlt");
         }
     };
 }
 
-// unsafe fn open_gop(image_handle: EfiHandle, boot_service: &EfiBootServices) -> &EfiGraphicsOutputProtocol {
-unsafe fn open_gop(
+/// Open Graphic Output Protocol
+fn open_gop(
     image_handle: EfiHandle,
     boot_service: &EfiBootServices,
 ) -> Result<&EfiGraphicsOutputProtocol, EfiStatus> {
-    let (num_gop_handles, gop_handles, buffer_ptr) = boot_service
+    let (_, gop_handles, buffer_ptr) = boot_service
         .locate_handle_buffer(
             EfiLocateSearchType::ByProtocol,
             &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
             null(),
         )
         .unwrap();
-    println!("handles: {}", num_gop_handles);
 
-    let _res = (boot_service
-        .open_protocol(
-            gop_handles[0],
-            &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
-            image_handle,
-            null(),
-            EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
-        )
-        .unwrap() as *const EfiGraphicsOutputProtocol)
-        .as_ref()
-        .unwrap();
+    let gop_ptr = boot_service.open_protocol(
+        gop_handles[0],
+        &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
+        image_handle,
+        null(),
+        EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL,
+    )? as *const EfiGraphicsOutputProtocol;
+
+    if gop_ptr.is_null() {
+        return Err(EfiStatus::NotFound);
+    }
+
+    let gop = unsafe { gop_ptr.as_ref() }.expect("Failed to reference gop_ptr");
+
     boot_service.free_pool(buffer_ptr).unwrap();
-    return Ok(_res);
+
+    Ok(gop)
 }
 
-fn get_buffer_info(
+/// Get the framebuffer address and size
+fn get_monitor_frame_buffer(
     image_handle: EfiHandle,
     boot_service: &EfiBootServices,
-) -> Result<(*mut u64, u64), EfiStatus> {
-    match unsafe { open_gop(image_handle, boot_service) } {
-        Ok(gop) => Ok((
-            gop.mode.frame_buffer_base as *mut u64,
-            gop.mode.frame_buffer_size as u64,
-        )),
+) -> Result<MonitorFrameBuffer, EfiStatus> {
+    match open_gop(image_handle, boot_service) {
+        Ok(gop) => Ok(MonitorFrameBuffer {
+            base_address: gop.mode.frame_buffer_base as *mut u64,
+            size: gop.mode.frame_buffer_size as u64,
+        }),
         Err(err) => Err(err),
     }
-    // Ok((ptr::null_mut(),2))
 }
 
 #[no_mangle]
 #[allow(unreachable_code)]
+/// The entry point of the bootloader
 pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTable) -> EfiStatus {
     uefi_alloc::init(system_table.boot_services(), system_table.con_out());
     console::init(system_table.con_out());
     println!("---- bootloader ----");
 
-    let _ = utf16!("tetetete").as_ptr();
-
     let mut memory_map: [u8; 8192] = [0; 8192];
 
-    let (map_size, map_key, descriptor_size, _) = system_table
+    let (map_size, _, descriptor_size, _) = system_table
         .boot_services()
         .get_memory_map(&mut memory_map)
         .unwrap();
 
-    let mut root_dir: *mut EfiFileProtocol = ptr::null_mut();
     let efi_file_proto = open_root_dir(image_handle, system_table.boot_services()).unwrap();
 
     let opened_handle = efi_file_proto
@@ -267,43 +260,23 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         )
         .unwrap();
 
-    save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size);
+    match save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size) {
+        Ok(_) => println!("Saved memory map"),
+        Err(err) => println!("Failed to save memory map: {:?}", err),
+    }
 
-    opened_handle.close().unwrap(); // こいつ、save_memory_map関数内部でやったら良いのでは。
-
-    // unsafe {
-    //     let gop = open_gop(image_handle, system_table.boot_services()).unwrap();
-    //     // Pixel Format: {}, {} pixels/line
-    //     println!("Resolution: {}x{}",
-    //         gop.mode.info.horizontal_resolution,
-    //         gop.mode.info.vertical_resolution,
-    //     );
-
-    //     println!("Frame Buffer: 0x{:x} - 0x{:x}, Size: {} bytes",
-    //         gop.mode.frame_buffer_base,
-    //         gop.mode.frame_buffer_base + gop.mode.frame_buffer_size as u64,
-    //         gop.mode.frame_buffer_size
-    //     );
-
-    //     let frame_buffer = gop.mode.frame_buffer_base as *mut u64;
-    //     for i in 0..gop.mode.frame_buffer_size {
-    //         *(frame_buffer.offset(i.try_into().unwrap())) = (i / 255).try_into().expect(format!("i is {}", i).as_str());
-    //     }
-    // }
+    opened_handle.close().unwrap();
+    efi_file_proto.close().unwrap();
 
     println!("---- run kernel ----");
 
-    let buffer_info = get_buffer_info(image_handle, system_table.boot_services()).unwrap();
+    run_kernel(system_table.boot_services(), image_handle);
 
-    run_kernel(
-        system_table.boot_services(),
-        efi_file_proto,
-        image_handle,
-        map_key,
-        buffer_info,
-    );
-
-    loop {}
+    loop {
+        unsafe {
+            asm!("hlt");
+        }
+    }
 
     EfiStatus::Success
 }
