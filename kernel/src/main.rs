@@ -2,7 +2,6 @@
 #![no_main]
 
 use core::{panic::PanicInfo, arch::asm};
-use core::ptr::*;
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
