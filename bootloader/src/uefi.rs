@@ -418,9 +418,9 @@ pub struct EfiGraphicsOutputModeInformation {
     version: u32,
     pub horizontal_resolution: u32,
     pub vertical_resolution: u32,
-    pixel_format: EfiGraphicsPixelFormat,
-    pixel_information: EfiPixelBitmask,
-    pixels_per_scan_line: u32
+    pub pixel_format: EfiGraphicsPixelFormat,
+    pub pixel_information: EfiPixelBitmask,
+    pub pixels_per_scan_line: u32
 }
 
 #[repr(C)]

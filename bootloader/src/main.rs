@@ -151,7 +151,7 @@ fn load_kernel(
 fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle) -> ! {
     load_kernel(KERNEL_BASE_ADDRESS, boot_service, image_handle).expect("Failed to load kernel");
 
-    let monitor_frame_buffer = get_monitor_frame_buffer(image_handle, boot_service).unwrap();
+    let monitor_frame_buffer = get_monitor_config(image_handle, boot_service).unwrap();
 
     match boot_service.exit_boot_service(image_handle) {
         Ok(_) => goto_kernel(monitor_frame_buffer),
@@ -161,14 +161,9 @@ fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle) -> ! {
     };
 }
 
-struct MonitorFrameBuffer {
-    base_address: *mut u64,
-    size: u64,
-}
-
 /// Jump to kernel
 #[allow(unreachable_code)]
-fn goto_kernel(frame_buffer: MonitorFrameBuffer) -> ! {
+fn goto_kernel(frame_buffer_config: FrameBufferConfig) -> ! {
     unsafe {
         // Get entrypoint address of kernel from elf header
         let entry_point = ((KERNEL_BASE_ADDRESS + 24) as *const u64).as_ref().unwrap();
@@ -178,10 +173,10 @@ fn goto_kernel(frame_buffer: MonitorFrameBuffer) -> ! {
         // Kernel binary is compiled with sysv64 calling convention
         let kernel_main = core::mem::transmute::<
             *const (),
-            unsafe extern "sysv64" fn(*mut u64, u64) -> !,
+            unsafe extern "sysv64" fn(FrameBufferConfig) -> !,
         >(kernel_main_ptr);
 
-        kernel_main(frame_buffer.base_address, frame_buffer.size);
+        kernel_main(frame_buffer_config);
 
         loop {
             asm!("hlt");
@@ -221,15 +216,37 @@ fn open_gop(
     Ok(gop)
 }
 
+#[repr(C)]
+enum PixelFormat {
+    RGB = 0,
+    BGR = 1,
+}
+
+#[repr(C)]
+struct FrameBufferConfig {
+    frame_buffer: *mut u64,
+    pixels_per_scan_line: u32,
+    horizontal_resolution: u32,
+    vertical_resolution: u32,
+    pixel_format: PixelFormat,
+}
+
 /// Get the framebuffer address and size
-fn get_monitor_frame_buffer(
+fn get_monitor_config(
     image_handle: EfiHandle,
     boot_service: &EfiBootServices,
-) -> Result<MonitorFrameBuffer, EfiStatus> {
+) -> Result<FrameBufferConfig, EfiStatus> {
     match open_gop(image_handle, boot_service) {
-        Ok(gop) => Ok(MonitorFrameBuffer {
-            base_address: gop.mode.frame_buffer_base as *mut u64,
-            size: gop.mode.frame_buffer_size as u64,
+        Ok(gop) => Ok(FrameBufferConfig {
+            frame_buffer: gop.mode.frame_buffer_base as *mut u64,
+            pixels_per_scan_line: gop.mode.info.pixels_per_scan_line,
+            horizontal_resolution: gop.mode.info.horizontal_resolution,
+            vertical_resolution: gop.mode.info.vertical_resolution,
+            pixel_format: match gop.mode.info.pixel_format {
+                EfiGraphicsPixelFormat::PixelRedGreenBlueReserved8BitPerColor => PixelFormat::RGB,
+                EfiGraphicsPixelFormat::PixelBlueGreenRedReserved8BitPerColor => PixelFormat::BGR,
+                _ => panic!("Unsupported pixel format"),
+            },
         }),
         Err(err) => Err(err),
     }
