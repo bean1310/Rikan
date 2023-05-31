@@ -5,12 +5,3 @@ version = 3
 [[package]]
 name = "rikan"
 version = "0.1.0"
-dependencies = [
- "utf16_literal",
-]
-
-[[package]]
-name = "utf16_literal"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "316f90fe4a7beb941ce0b6806ba7386f1a515155a42def71825f3f9a232e3f48"

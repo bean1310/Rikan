@@ -4,8 +4,6 @@ use core::ffi::c_void;
 use core::panic;
 use core::ptr::{NonNull};
 
-use utf16_literal::utf16;
-
 pub struct Allocator;
 
 static mut EFI_BOOT_SERVICES: Option<NonNull<EfiBootServices>> = None;
@@ -27,9 +25,6 @@ unsafe impl GlobalAlloc for Allocator {
         let align = layout.align();
 
         if align > 8 {
-            COUT.unwrap()
-                .as_ref()
-                .output_string(utf16!("align g8\0").as_ptr());
             panic!()
         } else {
             let res = EFI_BOOT_SERVICES
@@ -43,10 +38,6 @@ unsafe impl GlobalAlloc for Allocator {
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if layout.align() > 8 {
-            // alloc同様に不明
-            COUT.unwrap()
-                .as_ref()
-                .output_string(utf16!("dealloc\0").as_ptr());
             panic!()
         } else {
             let _ = EFI_BOOT_SERVICES.unwrap().as_ref().free_pool(ptr as *const c_void);
