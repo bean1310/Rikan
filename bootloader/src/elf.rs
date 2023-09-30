@@ -84,3 +84,33 @@ pub fn ELF64_R_INFO(s: u32, t: u32) -> u64 {
     ((s as u64) << 32) + (t as u64)
 }
 
+
+pub unsafe fn get_kernel_addr_space(ehdr: *const Elf64_Ehdr) -> (Elf64_Addr, Elf64_Addr) {
+    let phdr = ((*ehdr).e_phoff + ehdr as Elf64_Addr) as *const Elf64_Phdr;
+    let mut first: *const u64 = u64::MAX as *const _;
+    let mut last: *const u64 = u64::MIN as *const _;
+    for i in 0..(*ehdr).e_phnum {
+        let addr: *const Elf64_Phdr = phdr.offset(i as isize);
+        if (*addr).p_type != PT_LOAD {
+            continue;
+        }
+        println!("p_vaddr: {:x}", (*addr).p_vaddr);
+        first = core::cmp::min(first, ((*addr).p_vaddr) as *const _);
+        last = core::cmp::max(last, ((*addr).p_vaddr + (*addr).p_memsz) as *const _);
+    }
+    (first as Elf64_Addr, last as Elf64_Addr)
+}
+
+pub unsafe fn load_address_at(ehdr: *const Elf64_Ehdr) {
+    let phdr = ((*ehdr).e_phoff + ehdr as Elf64_Addr) as *const Elf64_Phdr;
+    for i in 0..(*ehdr).e_phnum {
+        let addr: *const Elf64_Phdr = phdr.offset(i as isize);
+        if (*addr).p_type != PT_LOAD {
+            continue;
+        }
+        core::ptr::copy_nonoverlapping( (ehdr as u64 + (*addr).p_offset) as *const u64, (*addr).p_vaddr as *mut u64,  (*addr).p_filesz as usize);
+        let remain_bytes = (*addr).p_memsz - (*addr).p_filesz;
+        // 4byte align
+        core::ptr::write_bytes((((*addr).p_vaddr + (*addr).p_filesz) + 0b11 & !0b11) as *mut u64, 0, remain_bytes as usize);
+    }
+}
