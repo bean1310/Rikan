@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(abi_efiapi)]
 #![feature(alloc_error_handler)]
+#![feature(allow_internal_unsafe)]
 
 use alloc::format;
 use core::arch::asm;
