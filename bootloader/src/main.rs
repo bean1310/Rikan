@@ -148,15 +148,17 @@ fn load_kernel(
         kernel_first_addr, kernel_last_addr
     );
 
-        let kernel_pages:usize = ((kernel_last_addr - kernel_first_addr + 0xfff) / 0x1000).try_into().unwrap();
-        boot_service.allocate_pages(
-            EfiAllocateType::AllocateAddress, 
-            EfiMemoryType::EfiLoaderData, 
-            kernel_pages,
-            kernel_first_addr
-        ).expect("Failed to allocate pages");
-        
-        elf::load(kernel_ehdr).expect("Failed to load kernel");
+    let kernel_pages:usize = ((kernel_last_addr - kernel_first_addr + 0xfff) / 0x1000).try_into().unwrap();
+    boot_service.allocate_pages(
+        EfiAllocateType::AllocateAddress, 
+        EfiMemoryType::EfiLoaderData, 
+        kernel_pages,
+        kernel_first_addr
+    ).expect("Failed to allocate pages");
+    
+    elf::load(kernel_ehdr).expect("Failed to load kernel");
+
+    boot_service.free_pool(kernel_buffer as *const _).expect("Failed to free pool");
 
     println!("[DEBUG] kernel loaded at 0x{:x}", base_address);
 
