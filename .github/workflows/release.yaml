@@ -1,0 +1,37 @@
+name: Update Release on PR Merge
+
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  update_release:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && startsWith(github.head_ref, 'day')
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+      
+    - name: Update Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG_NAME=${{ github.head_ref }}
+        RELEASE_ID=$(curl --silent --location --header "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME" | jq '.id')
+
+        echo "$RELEASE_ID"
+        
+        if [ "$RELEASE_ID" = "null" ]; then
+          # Create a new release if it does not exist
+          curl --request POST --data "{\"tag_name\": \"$TAG_NAME\", \"name\": \"$TAG_NAME\", \"draft\": false, \"prerelease\": false}" \
+            --header "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases"
+        else
+          # Update existing release
+          curl --request PATCH --data "{\"name\": \"$TAG_NAME\", \"draft\": false, \"prerelease\": false}" \
+            --header "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+        fi
