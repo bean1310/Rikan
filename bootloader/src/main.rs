@@ -140,14 +140,14 @@ fn load_kernel(
     let kernel_buffer = boot_service.allocate_pool(EfiMemoryType::EfiLoaderData, kernel_file_size).expect("Failed to allocate pool");
     kernel_file.read(kernel_file_size, kernel_buffer as u64)?;
 
-    let kernel_ehdr = kernel_buffer as *const Elf64_Ehdr;
+    let kernel_ehdr = unsafe {(kernel_buffer as *const Elf64_Ehdr).as_ref()}.expect("Failed to reference kernel_ehdr");
     
-    unsafe {
-        let (kernel_first_addr, kernel_last_addr) = elf::get_kernel_addr_space(kernel_ehdr);
-        println!(
-            "[DEBUG] kernel first addr: 0x{:x}, last addr: 0x{:x}",
-            kernel_first_addr, kernel_last_addr
-        );
+    let (kernel_first_addr, kernel_last_addr) = elf::get_pt_load_first_end(kernel_ehdr).expect("Failed to calculate kernel address space");
+    println!(
+        "[DEBUG] kernel first addr: 0x{:x}, last addr: 0x{:x}",
+        kernel_first_addr, kernel_last_addr
+    );
+
         let kernel_pages:usize = ((kernel_last_addr - kernel_first_addr + 0xfff) / 0x1000).try_into().unwrap();
         boot_service.allocate_pages(
             EfiAllocateType::AllocateAddress, 
@@ -156,8 +156,7 @@ fn load_kernel(
             kernel_first_addr
         ).expect("Failed to allocate pages");
         
-        elf::load_address_at(kernel_ehdr);
-    }
+        elf::load(kernel_ehdr).expect("Failed to load kernel");
 
     println!("[DEBUG] kernel loaded at 0x{:x}", base_address);
 

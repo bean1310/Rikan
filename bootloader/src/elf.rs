@@ -1,4 +1,4 @@
-use crate::{print};
+use crate::print;
 use crate::println;
 
 
@@ -28,6 +28,17 @@ pub struct Elf64_Ehdr {
     pub e_shentsize: Elf64_Half,
     pub e_shnum: Elf64_Half,
     pub e_shstrndx: Elf64_Half,
+}
+
+impl Elf64_Ehdr {
+    pub fn get_phdr_slice(&self) -> &[Elf64_Phdr] {
+        unsafe {
+            core::slice::from_raw_parts(
+                (self.e_phoff + self as *const _ as Elf64_Addr) as *const Elf64_Phdr,
+                self.e_phnum as usize,
+            )
+        }
+    }
 }
 
 #[repr(C)]
@@ -84,33 +95,49 @@ pub fn ELF64_R_INFO(s: u32, t: u32) -> u64 {
     ((s as u64) << 32) + (t as u64)
 }
 
+pub fn get_pt_load_first_end(ehdr: &Elf64_Ehdr) -> Result<(Elf64_Addr, Elf64_Addr), ElfStatus> {
+    let phdr_slice = ehdr.get_phdr_slice();
+    let mut first = u64::MAX;
+    let mut end = u64::MIN;
 
-pub unsafe fn get_kernel_addr_space(ehdr: *const Elf64_Ehdr) -> (Elf64_Addr, Elf64_Addr) {
-    let phdr = ((*ehdr).e_phoff + ehdr as Elf64_Addr) as *const Elf64_Phdr;
-    let mut first: *const u64 = u64::MAX as *const _;
-    let mut last: *const u64 = u64::MIN as *const _;
-    for i in 0..(*ehdr).e_phnum {
-        let addr: *const Elf64_Phdr = phdr.offset(i as isize);
-        if (*addr).p_type != PT_LOAD {
+    for phdr in phdr_slice {
+        if phdr.p_type != PT_LOAD {
             continue;
         }
-        println!("p_vaddr: {:x}", (*addr).p_vaddr);
-        first = core::cmp::min(first, ((*addr).p_vaddr) as *const _);
-        last = core::cmp::max(last, ((*addr).p_vaddr + (*addr).p_memsz) as *const _);
+        first = core::cmp::min(first, phdr.p_vaddr);
+        end = core::cmp::max(end, phdr.p_vaddr + phdr.p_memsz);
     }
-    (first as Elf64_Addr, last as Elf64_Addr)
+
+    Ok((first, end))
 }
 
-pub unsafe fn load_address_at(ehdr: *const Elf64_Ehdr) {
-    let phdr = ((*ehdr).e_phoff + ehdr as Elf64_Addr) as *const Elf64_Phdr;
-    for i in 0..(*ehdr).e_phnum {
-        let addr: *const Elf64_Phdr = phdr.offset(i as isize);
-        if (*addr).p_type != PT_LOAD {
+pub fn load(ehdr: &Elf64_Ehdr) -> Result<(), ElfStatus> {
+    let phdr_slice = ehdr.get_phdr_slice();
+    for phdr in phdr_slice {
+        if phdr.p_type != PT_LOAD {
             continue;
         }
-        core::ptr::copy_nonoverlapping( (ehdr as u64 + (*addr).p_offset) as *const u64, (*addr).p_vaddr as *mut u64,  (*addr).p_filesz as usize);
-        let remain_bytes = (*addr).p_memsz - (*addr).p_filesz;
-        // 4byte align
-        core::ptr::write_bytes((((*addr).p_vaddr + (*addr).p_filesz) + 0b11 & !0b11) as *mut u64, 0, remain_bytes as usize);
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                (ehdr as *const _ as u64 + phdr.p_offset) as *const u64,
+                phdr.p_vaddr as *mut u64,
+                phdr.p_filesz as usize,
+            );
+            let remain_bytes = phdr.p_memsz - phdr.p_filesz;
+            // 4byte align
+            core::ptr::write_bytes(
+                ((phdr.p_vaddr + phdr.p_filesz) + 0b11 & !0b11) as *mut u64,
+                0,
+                remain_bytes as usize,
+            );
+        }
     }
+    Ok(())
+}
+
+#[derive(Debug)]
+pub enum ElfStatus {
+    Ok,
+    Invalid,
+    NotElf,
 }
