@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(abi_efiapi)]
 #![feature(alloc_error_handler)]
+#![feature(allow_internal_unsafe)]
 
 use alloc::format;
 use core::arch::asm;
@@ -14,8 +15,11 @@ mod uefi_alloc;
 
 mod console;
 mod uefi;
+mod elf;
 
 use console::*;
+
+use crate::elf::Elf64_Ehdr;
 
 fn get_memory_map_unicode(memory_type_number: u32) -> &'static str {
     match memory_type_number {
@@ -133,14 +137,28 @@ fn load_kernel(
     let kernel_file_info = kernel_file.get_info().unwrap();
     let kernel_file_size = kernel_file_info.file_size.try_into().unwrap();
 
-    let base_address = boot_service.allocate_pages(
-        EfiAllocateType::AllocateAddress,
-        EfiMemoryType::EfiLoaderData,
-        kernel_file_size as usize,
-        base_address,
-    )?;
+    let kernel_buffer = boot_service.allocate_pool(EfiMemoryType::EfiLoaderData, kernel_file_size).expect("Failed to allocate pool");
+    kernel_file.read(kernel_file_size, kernel_buffer as u64)?;
 
-    kernel_file.read(kernel_file_size, base_address)?;
+    let kernel_ehdr = unsafe {(kernel_buffer as *const Elf64_Ehdr).as_ref()}.expect("Failed to reference kernel_ehdr");
+    
+    let (kernel_first_addr, kernel_last_addr) = elf::get_pt_load_first_end(kernel_ehdr).expect("Failed to calculate kernel address space");
+    println!(
+        "[DEBUG] kernel first addr: 0x{:x}, last addr: 0x{:x}",
+        kernel_first_addr, kernel_last_addr
+    );
+
+    let kernel_pages:usize = ((kernel_last_addr - kernel_first_addr + 0xfff) / 0x1000).try_into().unwrap();
+    boot_service.allocate_pages(
+        EfiAllocateType::AllocateAddress, 
+        EfiMemoryType::EfiLoaderData, 
+        kernel_pages,
+        kernel_first_addr
+    ).expect("Failed to allocate pages");
+    
+    elf::load(kernel_ehdr).expect("Failed to load kernel");
+
+    boot_service.free_pool(kernel_buffer as *const _).expect("Failed to free pool");
 
     println!("[DEBUG] kernel loaded at 0x{:x}", base_address);
 

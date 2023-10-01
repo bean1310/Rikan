@@ -5,12 +5,15 @@ use core::{
     fmt::{self, Write},
 };
 
+
 #[macro_export]
+#[allow_internal_unsafe]
 macro_rules! print {
     ($($arg:tt)*) => (unsafe{$crate::_print(format_args!($($arg)*))});
 }
 
 #[macro_export]
+#[allow_internal_unsafe]
 macro_rules! println {
     ($fmt:expr) => (print!(concat!($fmt, "\r\n")));
     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\r\n"), $($arg)*));

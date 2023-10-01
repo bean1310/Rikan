@@ -32,7 +32,7 @@ unsafe impl GlobalAlloc for Allocator {
                 .as_ref()
                 .allocate_pool(memory_type, size);
 
-            res.unwrap()
+            res.expect("Allocation is failed")
         }
         // ptr::null_mut()
     }

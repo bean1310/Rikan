@@ -308,22 +308,27 @@ impl EfiBootServices {
         (self.close_protocol)(handle, protocol, agent_handle, controller_handle)
     }
 
-    pub fn allocate_pool(&self, pooltype: EfiMemoryType, size: usize) -> Result<*mut u8, ()> {
+    /// ## Arguments
+    /// * `pooltype` メモリの種類
+    /// * `size` メモリのサイズ
+    pub fn allocate_pool(&self, pooltype: EfiMemoryType, size: usize) -> Result<*mut u8, EfiStatus> {
         let mut buffer = ptr::null_mut();
         let buffer_ptr = &mut buffer;
-        if (self.allocate_pool)(pooltype, size, buffer_ptr) as i32 == 0 {
+        let _res = (self.allocate_pool)(pooltype, size, buffer_ptr);
+        if _res == EfiStatus::Success {
             assert!(!((*buffer_ptr).is_null()));
             Ok(*buffer_ptr)
         } else {
-            Err(())
+            Err(_res)
         }
     }
 
-    pub fn free_pool(&self, buffer: *const c_void) -> Result<(), ()> {
-        if (self.free_pool)(buffer) == EfiStatus::Success {
-            Ok(())
+    pub fn free_pool(&self, buffer: *const c_void) -> Result<EfiStatus, EfiStatus> {
+        let _res = (self.free_pool)(buffer);
+        if _res == EfiStatus::Success {
+            Ok(_res)
         } else {
-            Err(())
+            Err(_res)
         }
     }
 
