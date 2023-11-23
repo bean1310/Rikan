@@ -19,6 +19,25 @@ enum PixelFormat {
     BGR = 1,
 }
 
+const K_FONT_A: [u8; 16] = [
+    0b00000000, //
+    0b00011000, //    **
+    0b00011000, //    **
+    0b00011000, //    **
+    0b00011000, //    **
+    0b00100100, //   *  *
+    0b00100100, //   *  *
+    0b00100100, //   *  *
+    0b00100100, //   *  *
+    0b01111110, //  ******
+    0b01000010, //  *    *
+    0b01000010, //  *    *
+    0b01000010, //  *    *
+    0b11100111, // ***  ***
+    0b00000000, //
+    0b00000000, //
+];
+
 #[repr(C)]
 pub struct FrameBufferConfig {
     frame_buffer: *mut u64,
@@ -48,6 +67,21 @@ unsafe fn write_pixel(x: u32, y: u32, color: PixelColor, frame_config: &FrameBuf
     }
 
 
+fn write_ascii(x: u32, y: u32, c: char, frame_config: &FrameBufferConfig) {
+    if c != 'A' {
+        return;
+    }
+
+    for dy in 0..16 {
+        for dx in 0..8 {
+            if (K_FONT_A[dy] << dx) & 0x80 > 0 {
+                unsafe {write_pixel(x + dx as u32, y + dy as u32, PixelColor {red: 255, green: 255, blue: 255}, frame_config);}
+            }
+        }
+    }
+}
+
+
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn kernel_main(frame_buffer_config: FrameBufferConfig) {
@@ -63,6 +97,9 @@ pub extern "C" fn kernel_main(frame_buffer_config: FrameBufferConfig) {
             unsafe {write_pixel(x, y, PixelColor {red: 0, green: 255, blue: 0}, &frame_buffer_config);}
         }
     }
+
+    write_ascii(50,50, 'A', &frame_buffer_config);
+    write_ascii(58,50, 'A', &frame_buffer_config);
 
     loop {
         unsafe {

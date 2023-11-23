@@ -124,9 +124,13 @@ pub fn load(ehdr: &Elf64_Ehdr) -> Result<(), ElfStatus> {
                 phdr.p_filesz as usize,
             );
             let remain_bytes = phdr.p_memsz - phdr.p_filesz;
+            
             // 4byte align
+            // This function is panic when dst is 0x101224 as *mut u64.
+            // Cause of this panic is unknown.
+            // I avoid this panic by using 32bit pointer.
             core::ptr::write_bytes(
-                ((phdr.p_vaddr + phdr.p_filesz) + 0b11 & !0b11) as *mut u64,
+                ((phdr.p_vaddr + phdr.p_filesz) + 0b11 & !0b11) as *mut u32,
                 0,
                 remain_bytes as usize,
             );
