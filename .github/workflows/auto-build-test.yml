@@ -15,15 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install linker
       run: sudo apt-get install lld
     - name: Install toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly-2022-02-23
         target: x86_64-unknown-linux-gnu
-        override: true
         components: rust-src
     - name: Create pseudo .env
       run: touch .env
