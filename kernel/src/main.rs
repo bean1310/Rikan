@@ -1,7 +1,15 @@
+// Copyright (c) 2023 MATSUSHITA Isato
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #![no_std]
 #![no_main]
 
 use core::{panic::PanicInfo, arch::asm};
+
+mod font;
+mod graphics;
 
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! {
@@ -11,95 +19,18 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     }
 }
 
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PixelFormat {
-    RGB = 0,
-    BGR = 1,
-}
-
-const K_FONT_A: [u8; 16] = [
-    0b00000000, //
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b01111110, //  ******
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b11100111, // ***  ***
-    0b00000000, //
-    0b00000000, //
-];
-
-#[repr(C)]
-pub struct FrameBufferConfig {
-    frame_buffer: *mut u64,
-    pixels_per_scan_line: u32,
-    horizontal_resolution: u32,
-    vertical_resolution: u32,
-    pixel_format: PixelFormat,
-}
-
-struct PixelColor {
-    red: u8,
-    green: u8,
-    blue: u8,
-}
-
-unsafe fn write_pixel(x: u32, y: u32, color: PixelColor, frame_config: &FrameBufferConfig) {
-    let p = (frame_config.frame_buffer as *const u8).add((4 * (frame_config.pixels_per_scan_line * y + x)) as usize) as *mut u8;
-    if frame_config.pixel_format == PixelFormat::RGB {
-                p.write_volatile(color.red.into());
-                p.add(1).write_volatile(color.green.into());
-                p.add(2).write_volatile(color.blue.into());
-        } else if frame_config.pixel_format == PixelFormat::BGR {
-                p.write_volatile(color.blue.into());
-                p.add(1).write_volatile(color.green.into());
-                p.add(2).write_volatile(color.red.into());
-        }       
-    }
-
-
-fn write_ascii(x: u32, y: u32, c: char, frame_config: &FrameBufferConfig) {
-    if c != 'A' {
-        return;
-    }
-
-    for dy in 0..16 {
-        for dx in 0..8 {
-            if (K_FONT_A[dy] << dx) & 0x80 > 0 {
-                unsafe {write_pixel(x + dx as u32, y + dy as u32, PixelColor {red: 255, green: 255, blue: 255}, frame_config);}
-            }
-        }
-    }
-}
-
-
 #[no_mangle]
 #[allow(unreachable_code)]
-pub extern "C" fn kernel_main(frame_buffer_config: FrameBufferConfig) {
+pub extern "C" fn kernel_main(frame_buffer_config: graphics::FrameBufferConfig) {
 
-    for x in 0..frame_buffer_config.horizontal_resolution {
-        for y in 0..frame_buffer_config.vertical_resolution {
-            unsafe {write_pixel(x, y, PixelColor {red: 255, green: 255, blue: 255}, &frame_buffer_config);}
-        }
+    graphics::fill_background(graphics::basic_color::WHITE, &frame_buffer_config);
+    graphics::fill_rectangle(0, 0, 200, 100, graphics::basic_color::CYAN, &frame_buffer_config);
+
+    let mut i = 1;
+    for c in '!'..'~' {
+        font::write_ascii_at(i * 8, 50, c, &frame_buffer_config);
+        i += 1;
     }
-
-    for x in 0..200 {
-        for y in 0..100 {
-            unsafe {write_pixel(x, y, PixelColor {red: 0, green: 255, blue: 0}, &frame_buffer_config);}
-        }
-    }
-
-    write_ascii(50,50, 'A', &frame_buffer_config);
-    write_ascii(58,50, 'A', &frame_buffer_config);
 
     loop {
         unsafe {
