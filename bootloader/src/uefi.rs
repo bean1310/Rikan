@@ -229,13 +229,24 @@ pub struct EfiBootServices {
     create_event_ex: NotImplemented,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct MemoryMap {
+    pub buffer_size: usize,
+    pub buffer: *mut c_void,
+    pub map_size: usize,
+    pub map_key: usize,
+    pub descriptor_size: usize,
+    pub descriptor_version: u32,
+}
+
 impl EfiBootServices {
     /// # Arguments
     /// * `memory_map_buffer` EfiMemoryDescriptor型の書き込まれる先のbuffer
     pub fn get_memory_map(
         &self,
         memory_map_buffer: &mut [u8],
-    ) -> Result<(usize, usize, usize, u32), EfiStatus> {
+    ) -> Result<MemoryMap, EfiStatus> {
         let mut memory_map_size = core::mem::size_of::<u8>() * memory_map_buffer.len();
         // let buffer_ptr = memory_map_buffer.as_mut_ptr();
         let mut map_key = 0;
@@ -250,12 +261,14 @@ impl EfiBootServices {
         );
 
         if _res == EfiStatus::Success {
-            Ok((
-                memory_map_size,
-                map_key,
-                descriptor_size,
-                descriptor_version,
-            ))
+            Ok(MemoryMap {
+                buffer_size: memory_map_size,
+                buffer: memory_map_buffer.as_mut_ptr() as _,
+                map_size: memory_map_size ,
+                map_key: map_key,
+                descriptor_size: descriptor_size,
+                descriptor_version: descriptor_version,
+            })
         } else {
             Err(_res)
         }
@@ -359,8 +372,8 @@ impl EfiBootServices {
         image_handle: EfiHandle,
     ) -> Result<EfiStatus, EfiStatus> {
         let mut memory_map: [u8; 8192] = [0; 8192];
-        let map_key = self.get_memory_map(&mut memory_map).unwrap().1;
-        let _res = (self.exit_boot_service)(image_handle, map_key);
+        let map_key = self.get_memory_map(&mut memory_map).unwrap().map_key;
+        let _res = (self.exit_boot_service)(image_handle, map_key as usize);
         if _res == EfiStatus::Success {
             Ok(_res)
         } else {

@@ -166,13 +166,13 @@ fn load_kernel(
 }
 
 /// Prepare kernel and jump to kernel
-fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle) -> ! {
+fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle, memory_map: MemoryMap) -> ! {
     load_kernel(KERNEL_BASE_ADDRESS, boot_service, image_handle).expect("Failed to load kernel");
 
     let monitor_frame_buffer = get_monitor_config(image_handle, boot_service).unwrap();
 
     match boot_service.exit_boot_service(image_handle) {
-        Ok(_) => goto_kernel(monitor_frame_buffer),
+        Ok(_) => goto_kernel(monitor_frame_buffer, memory_map),
         Err(res) => {
             panic!("Failed to exit boot service. {:?}", res)
         }
@@ -181,7 +181,7 @@ fn run_kernel(boot_service: &EfiBootServices, image_handle: EfiHandle) -> ! {
 
 /// Jump to kernel
 #[allow(unreachable_code)]
-fn goto_kernel(frame_buffer_config: FrameBufferConfig) -> ! {
+fn goto_kernel(frame_buffer_config: FrameBufferConfig, memory_map: MemoryMap) -> ! {
     unsafe {
         // Get entrypoint address of kernel from elf header
         let entry_point = ((KERNEL_BASE_ADDRESS + 24) as *const u64).as_ref().unwrap();
@@ -191,10 +191,10 @@ fn goto_kernel(frame_buffer_config: FrameBufferConfig) -> ! {
         // Kernel binary is compiled with sysv64 calling convention
         let kernel_main = core::mem::transmute::<
             *const (),
-            unsafe extern "sysv64" fn(FrameBufferConfig) -> !,
+            unsafe extern "sysv64" fn(FrameBufferConfig, MemoryMap) -> !,
         >(kernel_main_ptr);
 
-        kernel_main(frame_buffer_config);
+        kernel_main(frame_buffer_config, memory_map);
 
         loop {
             asm!("hlt");
@@ -278,11 +278,11 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
     console::init(system_table.con_out());
     println!("---- bootloader ----");
 
-    let mut memory_map: [u8; 8192] = [0; 8192];
+    let mut memory_descriptor_buffer: [u8; 8192] = [0; 8192];
 
-    let (map_size, _, descriptor_size, _) = system_table
+    let memory_map: MemoryMap = system_table
         .boot_services()
-        .get_memory_map(&mut memory_map)
+        .get_memory_map(&mut memory_descriptor_buffer)
         .unwrap();
 
     let efi_file_proto = open_root_dir(image_handle, system_table.boot_services()).unwrap();
@@ -295,7 +295,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
         )
         .unwrap();
 
-    match save_memory_map(&memory_map, &opened_handle, descriptor_size, map_size) {
+    match save_memory_map(&memory_descriptor_buffer, &opened_handle, memory_map.descriptor_size, memory_map.map_size) {
         Ok(_) => println!("Saved memory map"),
         Err(err) => println!("Failed to save memory map: {:?}", err),
     }
@@ -305,7 +305,7 @@ pub extern "C" fn efi_main(image_handle: EfiHandle, system_table: &EfiSystemTabl
 
     println!("---- run kernel ----");
 
-    run_kernel(system_table.boot_services(), image_handle);
+    run_kernel(system_table.boot_services(), image_handle, memory_map);
 
     loop {
         unsafe {

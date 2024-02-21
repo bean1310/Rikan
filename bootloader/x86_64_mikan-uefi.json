@@ -24,7 +24,7 @@
       "/NOLOGO",
       "/entry:efi_main",
       "/subsystem:efi_application",
-      "/base:0x3e138000"
+      "/base:0x3e11f2b0"
     ],
     "msvc": [
       "/NOLOGO",
