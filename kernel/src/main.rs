@@ -35,12 +35,14 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
 #[allow(unreachable_code)]
 pub extern "C" fn kernel_main(frame_buffer_config: graphics::FrameBufferConfig, memory_map: MemoryMap) {
 
-    graphics::fill_background(graphics::basic_color::BLACK, &frame_buffer_config);
+    graphics::fill_background(graphics::basic_color::GRAY, &frame_buffer_config);
 
     let mut console = console::Console::new(&frame_buffer_config);
-    console.write_string("Hello World");
-    console.write_string(" by Rust\n");
-    console.write_string("This is Isat Matsushita");
+    for i in 0..35 {
+        let mut s = String::<40>::new();
+        write!(s, "[LINE{}] Hello, World!\n", i + 1).unwrap();
+        console.write_string(&s);
+    }
 
     loop {
         unsafe {

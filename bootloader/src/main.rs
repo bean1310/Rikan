@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
 #![feature(abi_efiapi)]
 #![feature(alloc_error_handler)]

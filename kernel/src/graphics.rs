@@ -67,4 +67,5 @@ pub mod basic_color {
     pub const YELLOW: PixelColor = PixelColor {red: 255, green: 255, blue: 0};
     pub const CYAN: PixelColor = PixelColor {red: 0, green: 255, blue: 255};
     pub const MAGENTA: PixelColor = PixelColor {red: 255, green: 0, blue: 255};
+    pub const GRAY: PixelColor = PixelColor {red: 64, green: 64, blue: 64};
 }
