@@ -10,8 +10,8 @@ use core::{arch::asm, ffi::c_void, panic::PanicInfo};
 use heapless::String;
 use core::fmt::Write;
 
-mod font;
 mod graphics;
+mod console;
 
 #[repr(C)]
 pub struct MemoryMap {
@@ -31,32 +31,18 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     }
 }
 
-fn write_string(s: &str, x: u32, y: u32, frame_buffer_config: &graphics::FrameBufferConfig) {
-    let mut i = 0;
-    for c in s.chars() {
-        font::write_ascii_at(x + i * 8, y, c, frame_buffer_config);
-        i += 1;
-    }
-}
-
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn kernel_main(frame_buffer_config: graphics::FrameBufferConfig, memory_map: MemoryMap) {
 
-    graphics::fill_background(graphics::basic_color::WHITE, &frame_buffer_config);
-    graphics::fill_rectangle(0, 0, 200, 100, graphics::basic_color::CYAN, &frame_buffer_config);
+    graphics::fill_background(graphics::basic_color::GRAY, &frame_buffer_config);
 
-    let mut i = 1;
-    for c in '!'..'~' {
-        font::write_ascii_at(i * 8, 50, c, &frame_buffer_config);
-        i += 1;
+    let mut console = console::Console::new(&frame_buffer_config);
+    for i in 0..35 {
+        let mut s = String::<40>::new();
+        write!(s, "[LINE{}] Hello, World!\n", i + 1).unwrap();
+        console.write_string(&s);
     }
-
-    write_string("Hello World", 10, 70, &frame_buffer_config);
-
-    let mut s: String<64> = String::new();
-    write!(s, "{} + {} = {}", 1, 1, 1+1).unwrap();
-    write_string(s.as_str(), 10, 90, &frame_buffer_config);
 
     loop {
         unsafe {
