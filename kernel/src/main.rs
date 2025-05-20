@@ -13,6 +13,36 @@ use core::fmt::Write;
 mod graphics;
 mod console;
 
+const mouse_cursor_height: usize = 24;
+const mouse_cursor_width: usize = 15;
+
+static mouse_cursor_shape: [&str; mouse_cursor_height] = [
+    "@              ",
+    "@@             ",
+    "@.@            ",
+    "@..@           ",
+    "@...@          ",
+    "@....@         ",
+    "@.....@        ",
+    "@......@       ",
+    "@.......@      ",
+    "@........@     ",
+    "@.........@    ",
+    "@..........@   ",
+    "@...........@  ",
+    "@............@ ",
+    "@......@@@@@@@@",
+    "@......@       ",
+    "@....@@.@      ",
+    "@...@ @.@      ",
+    "@..@   @.@     ",
+    "@.@    @.@     ",
+    "@@      @.@    ",
+    "@       @.@    ",
+    "         @.@   ",
+    "         @@@   ",
+];
+
 #[repr(C)]
 pub struct MemoryMap {
     buffer_size: u64,
@@ -38,10 +68,23 @@ pub extern "C" fn kernel_main(frame_buffer_config: graphics::FrameBufferConfig, 
     graphics::fill_background(graphics::basic_color::GRAY, &frame_buffer_config);
 
     let mut console = console::Console::new(&frame_buffer_config);
-    for i in 0..35 {
+    for i in 0..3 {
         let mut s = String::<40>::new();
         write!(s, "[LINE{}] Hello, World!\n", i + 1).unwrap();
         console.write_string(&s);
+    }
+
+    for i in 0..mouse_cursor_height {
+        for j in 0..mouse_cursor_width {
+            let mut s = String::<15>::new();
+            if mouse_cursor_shape[i].as_bytes()[j] == b'@' {
+                unsafe {
+                    graphics::write_pixel(100 + j as u32, 100 + i as u32, graphics::basic_color::RED, &frame_buffer_config);}
+            } else if mouse_cursor_shape[i].as_bytes()[j] == b'.' {
+                unsafe {
+                    graphics::write_pixel(100 + j as u32, 100 + i as u32, graphics::basic_color::WHITE, &frame_buffer_config);}
+            }
+        }
     }
 
     loop {
