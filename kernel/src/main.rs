@@ -9,6 +9,8 @@
 use core::{arch::asm, ffi::c_void, panic::PanicInfo};
 use heapless::String;
 use core::fmt::Write;
+use console::*;
+use core::mem::MaybeUninit;
 
 mod graphics;
 mod console;
@@ -61,17 +63,21 @@ fn panic(_panic: &PanicInfo<'_>) -> ! {
     }
 }
 
+static mut FRAME_BUFFER_CONFIG: MaybeUninit<graphics::FrameBufferConfig> = MaybeUninit::uninit();
+
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn kernel_main(frame_buffer_config: graphics::FrameBufferConfig, memory_map: MemoryMap) {
 
-    graphics::fill_background(graphics::basic_color::GRAY, &frame_buffer_config);
+    unsafe {
+        FRAME_BUFFER_CONFIG.write(frame_buffer_config);
+        graphics::fill_background(graphics::basic_color::GRAY, FRAME_BUFFER_CONFIG.assume_init_ref());
+        console::init(FRAME_BUFFER_CONFIG.assume_init_ref());
+    };
 
-    let mut console = console::Console::new(&frame_buffer_config);
+    println!("---- Start RikanOS Kernel ----");
     for i in 0..3 {
-        let mut s = String::<40>::new();
-        write!(s, "[LINE{}] Hello, World!\n", i + 1).unwrap();
-        console.write_string(&s);
+        println!("Hello, RikanOS! {}", i);
     }
 
     for i in 0..mouse_cursor_height {
