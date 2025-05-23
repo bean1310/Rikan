@@ -4,6 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 use heapless::String;
+use core::fmt::{self, Write};
 
 use crate::graphics::{self, *};
 
@@ -17,6 +18,42 @@ const MAX_LINE_WIDTH: usize = 80;
 
 const DEFAULT_STRING: String::<MAX_LINE_WIDTH> = String::<MAX_LINE_WIDTH>::new();
 
+static mut CONSOLE: Option<Console> = None;
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    ($fmt:expr) => (print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+pub fn init(fbc: &'static FrameBufferConfig) {
+    unsafe {
+        if !CONSOLE.is_some() {
+            CONSOLE = Some(Console::new(fbc));
+        }
+    }
+}
+
+pub fn _print(args: core::fmt::Arguments) {
+    unsafe {
+        if let Some(console) = CONSOLE.as_mut() {
+            console.write_fmt(args).unwrap();
+        }
+    }
+}
+
+impl Write for Console<'_> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write_string(s);
+        Ok(())
+    }
+}
+
 pub struct Console<'a> {
     cursor_x: usize,
     cursor_y: usize,
@@ -24,9 +61,9 @@ pub struct Console<'a> {
     frame_buffer_config: &'a FrameBufferConfig,
 }
 
-impl<'a> Console<'a> {
+impl Console<'_> {
 
-    pub fn new(fbc: &'a FrameBufferConfig) -> Self {
+    pub fn new(fbc: &'static FrameBufferConfig) -> Self {
         Self {
             cursor_x: 0,
             cursor_y: 0,

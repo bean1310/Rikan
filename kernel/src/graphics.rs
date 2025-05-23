@@ -4,6 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameBufferConfig {
     frame_buffer: *mut u64,
     pixels_per_scan_line: u32,
