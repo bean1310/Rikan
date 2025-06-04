@@ -40,4 +40,6 @@ jobs:
           name: screenshot
           path: screenshot.png
       - name: Add screenshot to summary
-        run: echo "<img src='${{ steps.upload.outputs.artifact-url }}' />" >> $GITHUB_STEP_SUMMARY
+        run: |
+          ENCODED=$(base64 -w0 screenshot.png)
+          echo "<img src=\"data:image/png;base64,$ENCODED\" />" >> $GITHUB_STEP_SUMMARY
