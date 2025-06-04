@@ -21,16 +21,11 @@ jobs:
         run: |
           git clone https://github.com/uchan-nos/mikanos-build.git ../mikanos-build
           echo "MIKANOS_BUILD_PATH=../mikanos-build" > .env
-      - name: Patch run_qemu.sh for CI
-        run: |
-          sed -i 's/-display gtk/-display none/' ../mikanos-build/devenv/run_qemu.sh || true
-          sed -i 's/-display sdl/-display none/' ../mikanos-build/devenv/run_qemu.sh || true
-          sed -i 's/-monitor stdio/-monitor unix:\/tmp\/mon,server,nowait/' ../mikanos-build/devenv/run_qemu.sh || true
       - name: Build
         run: make
       - name: Run QEMU and take screenshot
         run: |
-          ../mikanos-build/devenv/run_qemu.sh bootloader/target/x86_64_mikan-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel &
+          QEMU_OPTS="-display none -monitor unix:/tmp/mon,server,nowait" ../mikanos-build/devenv/run_qemu.sh bootloader/target/x86_64_mikan-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel &
           QEMU_PID=$!
           sleep 10
           echo "screendump screenshot.ppm" | socat - UNIX-CONNECT:/tmp/mon
@@ -44,7 +39,6 @@ jobs:
         with:
           name: screenshot
           path: screenshot.png
-          compression-level: 6
       - name: Add screenshot to summary
         run: |
           ENCODED=$(base64 -w0 screenshot.png)
