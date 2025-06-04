@@ -1,0 +1,41 @@
+name: QEMU Run Screenshot
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  run-and-capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y lld qemu-system-x86 qemu-utils imagemagick socat
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2022-02-23
+          target: x86_64-unknown-linux-gnu
+          components: rust-src
+      - name: Clone mikanos-build
+        run: |
+          git clone https://github.com/uchan-nos/mikanos-build.git ../mikanos-build
+          echo "MIKANOS_BUILD_PATH=../mikanos-build" > .env
+      - name: Build
+        run: make
+      - name: Run QEMU and take screenshot
+        run: |
+          QEMU_OPTS="-display none -monitor unix:/tmp/mon,server,nowait" ../mikanos-build/devenv/run_qemu.sh bootloader/target/x86_64_mikan-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel &
+          QEMU_PID=$!
+          sleep 60
+          echo "screendump screenshot.ppm" | socat - UNIX-CONNECT:/tmp/mon
+          echo "quit" | socat - UNIX-CONNECT:/tmp/mon
+          wait $QEMU_PID
+      - name: Convert screenshot
+        run: convert screenshot.ppm screenshot.png
+      - name: Upload artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: screenshot.png
