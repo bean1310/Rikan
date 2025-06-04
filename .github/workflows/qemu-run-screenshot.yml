@@ -44,7 +44,7 @@ jobs:
         with:
           name: screenshot
           path: screenshot.png
-          compression-level: 0
+          compression-level: 6
       - name: Add screenshot to summary
         run: |
           ENCODED=$(base64 -w0 screenshot.png)
