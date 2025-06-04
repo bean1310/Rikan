@@ -14,7 +14,7 @@ pub enum EfiStatus {
     Success,
     LoadError,
     InvalidParameter,
-    Unsupprted,
+    Unsupported,
     BadBufferSize,
     BufferTooSmall,
     NotReady,
