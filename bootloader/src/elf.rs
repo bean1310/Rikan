@@ -118,22 +118,21 @@ pub fn load(ehdr: &Elf64_Ehdr) -> Result<(), ElfStatus> {
             continue;
         }
         unsafe {
+            // Copy the segment contents byte by byte.  The previous
+            // implementation used `u64` pointers with a byte count, which
+            // resulted in copying eight times more data than expected.
             core::ptr::copy_nonoverlapping(
-                (ehdr as *const _ as u64 + phdr.p_offset) as *const u64,
-                phdr.p_vaddr as *mut u64,
+                (ehdr as *const _ as u64 + phdr.p_offset) as *const u8,
+                phdr.p_vaddr as *mut u8,
                 phdr.p_filesz as usize,
             );
+
             let remain_bytes = phdr.p_memsz - phdr.p_filesz;
-            
-            // 4byte align
-            // This function is panic when dst is 0x101224 as *mut u64.
-            // Cause of this panic is unknown.
-            // I avoid this panic by using 32bit pointer.
-            core::ptr::write_bytes(
-                ((phdr.p_vaddr + phdr.p_filesz) + 0b11 & !0b11) as *mut u32,
-                0,
-                remain_bytes as usize,
-            );
+
+            // Clear the remaining area of the segment.  Align the start
+            // address to 4 bytes before zero-filling.
+            let dst = ((phdr.p_vaddr + phdr.p_filesz + 0b11) & !0b11) as *mut u8;
+            core::ptr::write_bytes(dst, 0, remain_bytes as usize);
         }
     }
     Ok(())
