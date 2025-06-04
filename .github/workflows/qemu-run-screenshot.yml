@@ -27,7 +27,7 @@ jobs:
         run: |
           QEMU_OPTS="-display none -monitor unix:/tmp/mon,server,nowait" ../mikanos-build/devenv/run_qemu.sh bootloader/target/x86_64_mikan-uefi/debug/rikan.efi kernel/target/x86_64-unknown-rikan-elf/debug/kernel &
           QEMU_PID=$!
-          sleep 10
+          sleep 60
           echo "screendump screenshot.ppm" | socat - UNIX-CONNECT:/tmp/mon
           echo "quit" | socat - UNIX-CONNECT:/tmp/mon
           wait $QEMU_PID
@@ -39,7 +39,3 @@ jobs:
         with:
           name: screenshot
           path: screenshot.png
-      - name: Add screenshot to summary
-        run: |
-          ENCODED=$(base64 -w0 screenshot.png)
-          echo "<img src=\"data:image/png;base64,$ENCODED\" />" >> $GITHUB_STEP_SUMMARY
