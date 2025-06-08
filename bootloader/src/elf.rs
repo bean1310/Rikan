@@ -145,3 +145,69 @@ pub enum ElfStatus {
     Invalid,
     NotElf,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_r_info_macros() {
+        let sym: u32 = 0x1234_5678;
+        let typ: u32 = 0x9abc_def0;
+        let info = ELF64_R_INFO(sym, typ);
+        assert_eq!(ELF64_R_SYM(info), sym);
+        assert_eq!(ELF64_R_TYPE(info), typ);
+    }
+
+    #[repr(C)]
+    struct MockElf {
+        ehdr: Elf64_Ehdr,
+        phdrs: [Elf64_Phdr; 2],
+    }
+
+    #[test]
+    fn test_get_pt_load_first_end() {
+        let phdr1 = Elf64_Phdr {
+            p_type: PT_LOAD,
+            p_flags: 0,
+            p_offset: 0,
+            p_vaddr: 0x1000,
+            p_paddr: 0,
+            p_filesz: 0x1000,
+            p_memsz: 0x2000,
+            p_align: 0,
+        };
+        let phdr2 = Elf64_Phdr {
+            p_type: PT_LOAD,
+            p_flags: 0,
+            p_offset: 0,
+            p_vaddr: 0x3000,
+            p_paddr: 0,
+            p_filesz: 0x1000,
+            p_memsz: 0x1000,
+            p_align: 0,
+        };
+
+        let header = Elf64_Ehdr {
+            e_ident: [0; EI_NIDENT],
+            e_type: 0,
+            e_machine: 0,
+            e_version: 0,
+            e_entry: 0,
+            e_phoff: core::mem::size_of::<Elf64_Ehdr>() as u64,
+            e_shoff: 0,
+            e_flags: 0,
+            e_ehsize: core::mem::size_of::<Elf64_Ehdr>() as u16,
+            e_phentsize: core::mem::size_of::<Elf64_Phdr>() as u16,
+            e_phnum: 2,
+            e_shentsize: 0,
+            e_shnum: 0,
+            e_shstrndx: 0,
+        };
+
+        let mock = MockElf { ehdr: header, phdrs: [phdr1, phdr2] };
+        let (first, end) = get_pt_load_first_end(&mock.ehdr).unwrap();
+        assert_eq!(first, 0x1000);
+        assert_eq!(end, 0x4000);
+    }
+}
